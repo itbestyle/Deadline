@@ -458,6 +458,8 @@ struct ContentView: View {
     @State private var showWeeklyReport = false
     @State private var selectedTab: MainTab = .deadlines
     @State private var showPressurePaywall = false
+    @State private var hasCompletedInitialSync = false
+    @State private var isInitialSyncInProgress = false
     
     @State private var showArchive = false
     
@@ -604,6 +606,9 @@ struct ContentView: View {
         .onReceive(viewModel.$deadlines) { _ in
             rescheduleProNotificationsIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+            rescheduleNotificationsForCurrentLanguage()
+        }
         .sheet(isPresented: $showPressurePaywall) {
             PressurePaywallView(subscriptionManager: subscriptionManager)
         }
@@ -640,9 +645,16 @@ struct ContentView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .task {
+                if !hasCompletedInitialSync {
+                    isInitialSyncInProgress = true
+                }
                 viewModel.configureIfNeeded(context: modelContext)
                 await fetchDeadlinesWithCurrentFilters()
                 rescheduleProNotificationsIfNeeded()
+                if !hasCompletedInitialSync {
+                    hasCompletedInitialSync = true
+                }
+                isInitialSyncInProgress = false
             }
             .onChange(of: filterStatus) { oldValue, newValue in
                 guard newValue != oldValue else { return }
@@ -1119,7 +1131,13 @@ struct ContentView: View {
         Group {
             if sections.isEmpty {
                 ScrollView {
-                    emptyDeadlinesView
+                    Group {
+                        if isInitialSyncInProgress || !hasCompletedInitialSync {
+                            initialSyncLoadingView
+                        } else {
+                            emptyDeadlinesView
+                        }
+                    }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 56)
                         .padding(.horizontal, 24)
@@ -1152,6 +1170,18 @@ struct ContentView: View {
         .sheet(item: $detailDeadline) { deadline in
             DeadlineDetailSheet(deadline: deadline)
         }
+    }
+
+    private var initialSyncLoadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.05)
+
+            Text(L("Синхронизация…"))
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 16)
     }
 
     private var emptyDeadlinesView: some View {
@@ -1601,6 +1631,11 @@ struct ContentView: View {
         let topInsight = report.insights.first ?? L("Weekly Report доступен")
         NotificationManager.shared.scheduleWeeklyPressureDigest(topInsight: topInsight)
     }
+
+    private func rescheduleNotificationsForCurrentLanguage() {
+        NotificationManager.shared.rescheduleAll(for: viewModel.deadlines)
+        rescheduleProNotificationsIfNeeded()
+    }
 }
 
 struct PressureModeView: View {
@@ -2037,15 +2072,11 @@ struct PressureModeView: View {
     }
 
     private func dueDateEndOfDay(_ deadline: Deadline) -> Date? {
-        guard let dueDate = parsedDeadlineDate(deadline.dueDate) else { return nil }
-        if deadline.dueDate.contains(":") {
+        guard let dueDate = deadline.normalizedDueDateForRecurrence(referenceDate: now) else { return nil }
+        if deadline.hasTimeInDueDate {
             return dueDate
         }
         return Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: dueDate)
-    }
-
-    private func parsedDeadlineDate(_ value: String) -> Date? {
-        deadlineDateFormatter.date(from: value) ?? legacyDeadlineDateFormatter.date(from: value)
     }
 
     private func urgency(for deadline: Deadline) -> UrgencyLevel {
