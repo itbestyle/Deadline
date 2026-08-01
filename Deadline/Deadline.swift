@@ -1,11 +1,11 @@
 import Foundation
 
-enum DeadlineStatus: String, Codable, CaseIterable {
+enum DeadlineStatus: String, Codable, CaseIterable, Sendable {
     case inProgress = "в процессе"
     case completed = "сдан"
     case cancelled = "отменён"
 
-    init(rawStatus: String) {
+    nonisolated init(rawStatus: String) {
         switch rawStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "сдан", "выполнен", "completed":
             self = .completed
@@ -90,6 +90,20 @@ struct Deadline: Identifiable, Codable {
 }
 
 extension Deadline {
+    private static let dueDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
+
+    private static let legacyDueDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
     var statusType: DeadlineStatus {
         get { DeadlineStatus(rawStatus: status) }
         set { status = newValue.rawValue }
@@ -100,15 +114,7 @@ extension Deadline {
     }
 
     func parsedDueDate() -> Date? {
-        let inputFormatter = DateFormatter()
-        inputFormatter.locale = Locale(identifier: "en_US_POSIX")
-        inputFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-
-        let legacyFormatter = DateFormatter()
-        legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
-        legacyFormatter.dateFormat = "yyyy-MM-dd"
-
-        return inputFormatter.date(from: dueDate) ?? legacyFormatter.date(from: dueDate)
+        Deadline.dueDateFormatter.date(from: dueDate) ?? Deadline.legacyDueDateFormatter.date(from: dueDate)
     }
 
     func normalizedDueDateForRecurrence(referenceDate: Date = Date()) -> Date? {
@@ -141,5 +147,141 @@ extension Deadline {
         }
 
         return candidate
+    }
+
+    private static let subjectLocalizationMap: [String: String] = [
+        "личное": "Личное",
+        "personal": "Личное",
+        "работа": "Работа",
+        "work": "Работа",
+        "здоровье": "Здоровье",
+        "health": "Здоровье",
+        "финансы": "Финансы",
+        "finance": "Финансы",
+        "finances": "Финансы",
+        "покупки": "Покупки",
+        "shopping": "Покупки",
+        "другое": "Другое",
+        "other": "Другое"
+    ]
+
+    static func localizedSubjectName(_ raw: String) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return raw }
+        if let key = subjectLocalizationMap[normalized] {
+            return NSLocalizedString(key, comment: "")
+        }
+        return raw
+    }
+
+    var localizedSubjectName: String {
+        Self.localizedSubjectName(subject)
+    }
+
+    var usesAutoPriority: Bool {
+        let stored = priority.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stored.isEmpty || stored == "Авто"
+    }
+
+    func effectiveDueInstant(referenceDate: Date = Date()) -> Date? {
+        guard let candidate = normalizedDueDateForRecurrence(referenceDate: referenceDate) else {
+            return nil
+        }
+        if hasTimeInDueDate {
+            return candidate
+        }
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: candidate)
+        return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? candidate
+    }
+
+    func resolvedPriority(referenceDate: Date = Date()) -> String {
+        if !usesAutoPriority {
+            return priority.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let dueInstant = effectiveDueInstant(referenceDate: referenceDate) else {
+            return priority
+        }
+        return Self.autoPriority(forDueInstant: dueInstant, referenceDate: referenceDate)
+    }
+
+    /// Aligns list urgency with Pressure mode windows (24h / 72h).
+    static func autoPriority(forDueInstant dueInstant: Date, referenceDate: Date = Date()) -> String {
+        let remaining = dueInstant.timeIntervalSince(referenceDate)
+        if remaining <= 24 * 3600 {
+            return "Высокий"
+        }
+        if remaining <= 72 * 3600 {
+            return "Средний"
+        }
+        return "Низкий"
+    }
+
+    static func watchPressureLevel(for deadline: Deadline, referenceDate: Date = Date()) -> String {
+        switch deadline.resolvedPriority(referenceDate: referenceDate) {
+        case "Высокий":
+            return "critical"
+        case "Средний":
+            return "medium"
+        default:
+            return "low"
+        }
+    }
+
+    func postponed(byDays days: Int, referenceDate: Date = Date()) -> Deadline {
+        var copy = self
+        guard let base = normalizedDueDateForRecurrence(referenceDate: referenceDate) ?? parsedDueDate() else {
+            return copy
+        }
+        guard let shifted = Calendar.current.date(byAdding: .day, value: days, to: base) else {
+            return copy
+        }
+        let formatter = Self.dueDateFormatter
+        copy.dueDate = formatter.string(from: shifted)
+        return copy
+    }
+
+    /// Effective due used for list sections (end of day for date-only tasks).
+    func effectiveDueDateForList(referenceDate: Date = Date()) -> Date? {
+        effectiveDueInstant(referenceDate: referenceDate)
+    }
+
+    func isOverdue(referenceDate: Date = Date()) -> Bool {
+        guard statusType == .inProgress,
+              let dueDate = effectiveDueDateForList(referenceDate: referenceDate) else { return false }
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let dueStart = calendar.startOfDay(for: dueDate)
+        return dueStart < todayStart
+    }
+
+    func isDueToday(referenceDate: Date = Date()) -> Bool {
+        guard statusType == .inProgress,
+              let dueDate = effectiveDueDateForList(referenceDate: referenceDate) else { return false }
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let dueStart = calendar.startOfDay(for: dueDate)
+        return dueStart == todayStart
+    }
+
+    /// Section bucket key for date-sorted list (`Просрочено`, `Горит сегодня`, …).
+    func listSectionKey(referenceDate: Date = Date()) -> String? {
+        guard statusType == .inProgress,
+              let date = effectiveDueDateForList(referenceDate: referenceDate) else { return nil }
+
+        let calendar = Calendar.current
+        if isOverdue(referenceDate: referenceDate) {
+            return "Просрочено"
+        }
+        if isDueToday(referenceDate: referenceDate) {
+            return "Горит сегодня"
+        }
+        if calendar.isDateInToday(date) {
+            return "Сегодня"
+        }
+        if calendar.isDate(date, equalTo: referenceDate, toGranularity: .weekOfYear) {
+            return "На этой неделе"
+        }
+        return "Позже"
     }
 }

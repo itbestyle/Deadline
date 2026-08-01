@@ -1,0 +1,13 @@
+# Игнорируем папки сборки и кэш
+.git/
+.DS_Store
+build/
+dist/
+.next/
+out/
+
+# Для iOS (Xcode)
+Pods/
+.bundle/
+derivedData/
+*.xcworkspace/

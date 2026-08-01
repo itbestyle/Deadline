@@ -3,7 +3,7 @@ import SwiftData
 import UIKit
 import Combine
 
-private func L(_ key: String) -> String {
+func L(_ key: String) -> String {
     NSLocalizedString(key, comment: "")
 }
 
@@ -133,8 +133,8 @@ struct PressureInsightsEngine {
     func makeReport(from deadlines: [Deadline], now: Date = Date()) -> WeeklyPressureReport {
         let active = deadlines.filter { $0.statusType == .inProgress }
         let activePairs = active.compactMap { item -> (Deadline, Date)? in
-            guard let due = parse(item.dueDate) else { return nil }
-            return (item, normalizeDueDate(item.dueDate, due: due))
+            guard let due = effectiveDueDate(for: item, now: now) else { return nil }
+            return (item, due)
         }
 
         let current = makeMetrics(from: deadlines, activePairs: activePairs, now: now)
@@ -300,6 +300,12 @@ struct PressureInsightsEngine {
         parser.date(from: value) ?? legacyParser.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
+    private func effectiveDueDate(for deadline: Deadline, now: Date) -> Date? {
+        let base = deadline.normalizedDueDateForRecurrence(referenceDate: now) ?? parse(deadline.dueDate)
+        guard let due = base else { return nil }
+        return normalizeDueDate(deadline.dueDate, due: due)
+    }
+
     private func normalizeDueDate(_ raw: String, due: Date) -> Date {
         if raw.contains(":") {
             return due
@@ -317,6 +323,7 @@ struct PressureInsightsEngine {
 struct WeeklyReportView: View {
     let deadlines: [Deadline]
     private let engine = PressureInsightsEngine()
+    @Environment(\.dismiss) private var dismiss
 
     private var report: WeeklyPressureReport {
         engine.makeReport(from: deadlines)
@@ -407,9 +414,19 @@ struct WeeklyReportView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .padding(16)
+                .iPadReadableContent(maxWidth: 720)
             }
             .navigationTitle(L("Weekly Report"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label(L("Назад"), systemImage: "chevron.left")
+                    }
+                }
+            }
         }
     }
 
@@ -448,22 +465,66 @@ struct WeeklyReportView: View {
     }
 }
 
+private struct AdaptiveTabViewStyleModifier: ViewModifier {
+    let useSidebar: Bool
+
+    func body(content: Content) -> some View {
+        if useSidebar {
+            content.tabViewStyle(.sidebarAdaptable)
+        } else {
+            content.tabViewStyle(.automatic)
+        }
+    }
+}
+
+private struct RootTabPresentationModifier: ViewModifier {
+    @Binding var showPressurePaywall: Bool
+    @Binding var showOnboarding: Bool
+    @ObservedObject var subscriptionManager: SubscriptionManager
+    let onOnboardingDismissed: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showPressurePaywall) {
+                PressurePaywallView(subscriptionManager: subscriptionManager)
+                    .iPadSheetPresentation()
+            }
+            .onChange(of: showPressurePaywall) { _, shown in
+                if shown {
+                    PressureABAnalytics.shared.trackPaywallShown()
+                }
+            }
+            .sheet(isPresented: $showOnboarding) {
+                OnboardingView(isPresented: $showOnboarding)
+                    .iPadSheetPresentation()
+            }
+            .onChange(of: showOnboarding) { _, isShowing in
+                if !isShowing { onOnboardingDismissed() }
+            }
+    }
+}
+
 struct ContentView: View {
     @StateObject private var viewModel = DeadlineViewModel()
     @StateObject private var subscriptionManager = SubscriptionManager()
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+    @AppStorage("hasDismissedTasksPressureHint") private var hasDismissedTasksPressureHint = false
+    @AppStorage("hasCompletedProductOnboarding") private var hasCompletedProductOnboarding = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showAppearance = false
     @State private var showSubscription = false
     @State private var showWeeklyReport = false
+    @State private var showCalendarSettings = false
+    @State private var showAccountSettings = false
+    @State private var showProductHelp = false
     @State private var selectedTab: MainTab = .deadlines
     @State private var showPressurePaywall = false
-    @State private var hasCompletedInitialSync = false
-    @State private var isInitialSyncInProgress = false
-    
     @State private var showArchive = false
     
-    // Поля для добавления нового дедлайна
+    // Поля для добавления новой задачи
     @State private var newTitle = ""
     @State private var newSubject = "Личное"
     @State private var newDate = Date()
@@ -481,17 +542,25 @@ struct ContentView: View {
     // Для редактирования
     @State private var editingDeadline: Deadline?
     @State private var detailDeadline: Deadline?
+    @State private var selectedSplitDeadlineID: String?
+    @State private var searchQuery = ""
+    @State private var isSearchExpanded = false
+    @State private var showOnboarding = false
+    @State private var pendingUndo: UndoableDeadlineAction?
+    @State private var undoDismissTask: Task<Void, Never>?
+    @State private var pressureEntranceToken = 0
+    @FocusState private var isSearchFocused: Bool
     
     private var syncStatusBanner: some View {
         Group {
-            if viewModel.isSyncing {
+            if viewModel.isOffline {
                 HStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text(L("Синхронизация…"))
+                    Image(systemName: "wifi.slash")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(L("Нет сети · показаны локальные данные"))
+                        .font(.caption)
                 }
+                .foregroundStyle(.orange)
                 .padding(.vertical, 4)
             } else if let message = viewModel.lastSyncError {
                 Text(String(format: L("Ошибка синхронизации: %@"), message))
@@ -501,7 +570,6 @@ struct ContentView: View {
             }
         }
     }
-    @State private var isEditing = false
     
     // Фильтры
     @State private var filterStatus = ""
@@ -589,55 +657,128 @@ struct ContentView: View {
     
     
     var body: some View {
+        rootTabInterface
+    }
+
+    private var undoToastAppearAnimation: Animation {
+        .spring(response: 0.44, dampingFraction: 0.82)
+    }
+
+    private var undoToastDismissAnimation: Animation {
+        .spring(response: 0.30, dampingFraction: 0.92)
+    }
+
+    private var undoToastTransition: AnyTransition {
+        .asymmetric(
+            insertion: .offset(y: 18)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.96, anchor: .bottom)),
+            removal: .offset(y: 10)
+                .combined(with: .opacity)
+        )
+    }
+
+    private var undoToastLift: CGFloat {
+        horizontalSizeClass == .regular ? 12 : 56
+    }
+
+    private var rootTabInterface: some View {
+        rootTabCore
+            .modifier(RootTabPresentationModifier(
+                showPressurePaywall: $showPressurePaywall,
+                showOnboarding: $showOnboarding,
+                subscriptionManager: subscriptionManager,
+                onOnboardingDismissed: { hasCompletedProductOnboarding = true }
+            ))
+            .onChange(of: selectedTab) { _, newValue in
+                handleSelectedTabChange(newValue)
+            }
+            .onChange(of: subscriptionManager.isPressureProUnlocked) { _, _ in
+                rescheduleProNotificationsIfNeeded()
+            }
+            .onReceive(viewModel.$deadlines) { _ in
+                rescheduleProNotificationsIfNeeded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+                rescheduleNotificationsForCurrentLanguage()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .deadlineExternalAction)) { notification in
+                handleDeadlineExternalAction(notification)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task {
+                        await viewModel.processPendingWidgetActions()
+                        await subscriptionManager.refreshEntitlements()
+                    }
+                }
+            }
+            .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+            .animation(.easeInOut(duration: 0.2), value: appTheme)
+            .tint(.indigo)
+    }
+
+    private var rootTabCore: some View {
         TabView(selection: $selectedTab) {
             deadlinesTab
             pressureTab
         }
-        .onChange(of: selectedTab) { _, newValue in
-            guard newValue == .pressure else { return }
-            guard !subscriptionManager.isPressureProUnlocked else { return }
+        .modifier(AdaptiveTabViewStyleModifier(useSidebar: horizontalSizeClass == .regular))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            undoToastInset
+        }
+    }
+
+    private func handleSelectedTabChange(_ newValue: MainTab) {
+        guard newValue == .pressure else { return }
+        if subscriptionManager.isPressureProUnlocked {
+            pressureEntranceToken += 1
+            pressureTabHaptic()
+        } else {
             selectedTab = .deadlines
             showPressurePaywall = true
             PressureABAnalytics.shared.trackPaywallShown()
         }
-        .onChange(of: subscriptionManager.isPressureProUnlocked) { _, _ in
-            rescheduleProNotificationsIfNeeded()
-        }
-        .onReceive(viewModel.$deadlines) { _ in
-            rescheduleProNotificationsIfNeeded()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
-            rescheduleNotificationsForCurrentLanguage()
-        }
-        .sheet(isPresented: $showPressurePaywall) {
-            PressurePaywallView(subscriptionManager: subscriptionManager)
-        }
-        .onChange(of: showPressurePaywall) { _, shown in
-            if shown {
-                PressureABAnalytics.shared.trackPaywallShown()
+    }
+
+    @ViewBuilder
+    private var undoToastInset: some View {
+        if let pendingUndo {
+            DeadlineUndoToast(action: pendingUndo) {
+                Task { await undoDeadlineAction() }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, undoToastLift)
+            .transition(undoToastTransition)
         }
-        .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
-        .animation(.easeInOut(duration: 0.2), value: appTheme)
-        .tint(.indigo)
     }
 
     private var deadlinesTab: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
-                addDeadlineButton
+                taskActionRow
 
                 filterControls
                     .padding(.horizontal)
                     .padding(.top, 8)
 
-                syncStatusBanner
+                if !hasDismissedTasksPressureHint {
+                    tasksPressureHintBanner
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+
+                if hasActiveSearch && !sections.isEmpty {
+                    searchResultsBanner
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
 
                 deadlineList
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.deadlines.count)
             }
             .sheet(isPresented: $isFormExpanded) {
                 addFormSheet
+                    .iPadFormSheetPresentation()
             }
             .onAppear {
                 NotificationManager.shared.requestAuthorization()
@@ -645,51 +786,77 @@ struct ContentView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                if !hasCompletedInitialSync {
-                    isInitialSyncInProgress = true
-                }
                 viewModel.configureIfNeeded(context: modelContext)
-                await fetchDeadlinesWithCurrentFilters()
+                viewModel.applyFilters(status: filterStatus, subject: filterSubject)
                 rescheduleProNotificationsIfNeeded()
-                if !hasCompletedInitialSync {
-                    hasCompletedInitialSync = true
+                await AuthService.shared.refreshBackendTokenIfNeeded()
+                await viewModel.processPendingWidgetActions()
+                await viewModel.syncNow()
+                if !hasCompletedProductOnboarding {
+                    showOnboarding = true
                 }
-                isInitialSyncInProgress = false
             }
             .onChange(of: filterStatus) { oldValue, newValue in
                 guard newValue != oldValue else { return }
-                Task { await fetchDeadlinesWithCurrentFilters() }
+                viewModel.applyFilters(status: filterStatus, subject: filterSubject)
+                Task { await viewModel.syncNow() }
             }
             .onChange(of: filterSubject) { oldValue, newValue in
                 guard newValue != oldValue else { return }
-                Task { await fetchDeadlinesWithCurrentFilters() }
+                viewModel.applyFilters(status: filterStatus, subject: filterSubject)
+                Task { await viewModel.syncNow() }
             }
-            .sheet(isPresented: $isEditing, onDismiss: { editingDeadline = nil }) {
-                if let edit = editingDeadline {
-                    EditDeadlineView(deadline: edit) { updated in
-                        Task {
-                            await viewModel.updateDeadline(updated)
-                            isEditing = false
-                        }
+            .sheet(item: $editingDeadline, onDismiss: { editingDeadline = nil }) { edit in
+                EditDeadlineView(deadline: edit) { updated in
+                    Task {
+                        await viewModel.updateDeadline(updated)
+                        editingDeadline = nil
                     }
                 }
+                .iPadFormSheetPresentation()
             }
             .sheet(isPresented: $showArchive) {
                 ArchiveView(viewModel: viewModel)
+                    .iPadSheetPresentation()
             }
             .sheet(isPresented: $showAppearance) {
                 NavigationStack {
                     AppearanceView()
                 }
                 .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                .iPadSheetPresentation()
             }
             .sheet(isPresented: $showSubscription) {
-                SubscriptionStatusView(subscriptionManager: subscriptionManager)
-                    .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                SubscriptionStatusView(subscriptionManager: subscriptionManager) {
+                    showSubscription = false
+                    showPressurePaywall = true
+                }
+                .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                .iPadSheetPresentation()
             }
             .sheet(isPresented: $showWeeklyReport) {
                 WeeklyReportView(deadlines: viewModel.deadlines)
                     .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                    .iPadSheetPresentation()
+            }
+            .sheet(isPresented: $showCalendarSettings) {
+                NavigationStack {
+                    CalendarSettingsView()
+                }
+                .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                .iPadSheetPresentation()
+            }
+            .sheet(isPresented: $showAccountSettings) {
+                NavigationStack {
+                    AccountSettingsView()
+                }
+                .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                .iPadSheetPresentation()
+            }
+            .sheet(isPresented: $showProductHelp) {
+                ProductHelpView()
+                    .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
+                    .iPadSheetPresentation()
             }
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -698,48 +865,7 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
-                        if let email = AuthService.shared.currentEmail {
-                            Text(email)
-                        }
-
-                        Divider()
-                        Button {
-                            showAppearance = true
-                        } label: {
-                            Label(L("Оформление"), systemImage: "circle.lefthalf.filled")
-                        }
-
-                        Button {
-                            showSubscription = true
-                        } label: {
-                            Label(L("Подписка"), systemImage: "creditcard")
-                        }
-
-                        Button {
-                            if subscriptionManager.isPressureProUnlocked {
-                                showWeeklyReport = true
-                            } else {
-                                showPressurePaywall = true
-                            }
-                        } label: {
-                            Label(L("Report Pro"), systemImage: "chart.bar.doc.horizontal")
-                        }
-
-                        Divider()
-
-                        Button {
-                            showArchive = true
-                        } label: {
-                            Label(L("Архив"), systemImage: "archivebox")
-                        }
-                        Divider()
-                        Button(role: .destructive) {
-                            let haptic = UIImpactFeedbackGenerator(style: .light)
-                            haptic.impactOccurred(intensity: 0.65)
-                            AuthService.shared.logout()
-                        } label: {
-                            Label(L("Выйти"), systemImage: "rectangle.portrait.and.arrow.right")
-                        }.tint(.red)
+                        profileMenuContent
                     } label: {
                         Image(systemName: "person.circle")
                     }
@@ -758,21 +884,131 @@ struct ContentView: View {
             }
         }
         .tabItem {
-            Label(L("Дедлайны"), systemImage: "list.bullet.rectangle")
+            Label(L("Задачи"), systemImage: "list.bullet.rectangle")
         }
         .tag(MainTab.deadlines)
     }
 
+    @ViewBuilder
+    private var profileMenuContent: some View {
+        Section(L("Профиль")) {
+            Button {
+                showAccountSettings = true
+            } label: {
+                if let email = AuthService.shared.currentEmail {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Аккаунт"))
+                            Text(email)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "person.crop.circle")
+                    }
+                } else {
+                    Label(L("Аккаунт"), systemImage: "person.crop.circle")
+                }
+            }
+            .accessibilityIdentifier("openAccountSettingsButton")
+        }
+
+        Section(L("Настройки")) {
+            Button {
+                showAppearance = true
+            } label: {
+                Label(L("Оформление"), systemImage: "circle.lefthalf.filled")
+            }
+
+            Button {
+                showCalendarSettings = true
+            } label: {
+                Label(L("Календарь iOS"), systemImage: "calendar")
+            }
+
+            Button {
+                showArchive = true
+            } label: {
+                Label(L("Архив"), systemImage: "archivebox")
+            }
+
+            Button {
+                showProductHelp = true
+            } label: {
+                Label(L("Как устроен Redloop"), systemImage: "questionmark.circle")
+            }
+        }
+
+        Section(L("Режим давления")) {
+            Button {
+                showSubscription = true
+            } label: {
+                Label(L("Подписка"), systemImage: "creditcard")
+            }
+
+            Button {
+                if subscriptionManager.isPressureProUnlocked {
+                    showWeeklyReport = true
+                } else {
+                    showPressurePaywall = true
+                }
+            } label: {
+                Label(L("Weekly Report"), systemImage: "chart.bar.doc.horizontal")
+            }
+        }
+
+        Section {
+            Button(role: .destructive) {
+                let haptic = UIImpactFeedbackGenerator(style: .light)
+                haptic.impactOccurred(intensity: 0.65)
+                AuthService.shared.logout()
+            } label: {
+                Label(L("Выйти"), systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        }
+    }
+
     private var pressureTab: some View {
-        PressureModeView(deadlines: viewModel.deadlines, deadlineDateFormatter: deadlineDateFormatter)
+        PressureModeView(
+            deadlines: viewModel.deadlines,
+            deadlineDateFormatter: deadlineDateFormatter,
+            showsTasksPressureHint: !hasDismissedTasksPressureHint,
+            entranceToken: pressureEntranceToken,
+            onDismissTasksPressureHint: { hasDismissedTasksPressureHint = true },
+            onCompleteDeadline: { deadline in
+                Task { await completeDeadlineWithUndo(deadline) }
+            }
+        )
             .tabItem {
                 Label(L("Режим давления"), systemImage: "exclamationmark.triangle.fill")
             }
             .tag(MainTab.pressure)
     }
+
+    private var tasksPressureHintBanner: some View {
+        TasksPressureHintBanner {
+            hasDismissedTasksPressureHint = true
+        }
+    }
     
-    // MARK: - Add Deadline Button
-    private var addDeadlineButton: some View {
+    // MARK: - Task Action Row
+    private var taskActionRow: some View {
+        HStack(spacing: 10) {
+            if isSearchExpanded {
+                searchFieldBar
+            } else {
+                addTaskButton
+                searchToggleButton
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: isSearchExpanded)
+    }
+
+    private var addTaskButton: some View {
         Button {
             let haptic = UIImpactFeedbackGenerator(style: .light)
             haptic.impactOccurred(intensity: 0.75)
@@ -797,16 +1033,92 @@ struct ContentView: View {
             )
             .shadow(color: Color.indigo.opacity(addButtonBreathing ? 0.18 : 0.1), radius: 10, x: 0, y: 4)
             .scaleEffect(addButtonBreathing ? 1 : 0.985)
-            .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: addButtonBreathing)
         }
         .buttonStyle(CompactIndigoButtonStyle())
         .accessibilityIdentifier("openAddDeadlineButton")
-        .padding(.horizontal)
-        .padding(.top, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            addButtonBreathing = true
+            addButtonBreathing = false
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                    addButtonBreathing = true
+                }
+            }
         }
+        .onDisappear {
+            addButtonBreathing = false
+        }
+    }
+
+    private var searchToggleButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isSearchExpanded = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                isSearchFocused = true
+            }
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.indigo)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.indigo.opacity(0.28), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(CompactIndigoButtonStyle())
+        .accessibilityLabel(L("Поиск задач"))
+    }
+
+    private var searchFieldBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            TextField(L("Поиск задач"), text: $searchQuery)
+                .font(.subheadline)
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSearchExpanded = false
+                    searchQuery = ""
+                    isSearchFocused = false
+                }
+            } label: {
+                Text(L("Отмена"))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.indigo)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.indigo.opacity(0.28), lineWidth: 1)
+                )
+        )
+        .frame(maxWidth: .infinity)
     }
 
     private struct CompactIndigoButtonStyle: ButtonStyle {
@@ -820,38 +1132,19 @@ struct ContentView: View {
     private struct PriorityBadge: View {
         let iconName: String
         let title: String
-        let tint: Color
+        let priority: String
         let pulsing: Bool
 
-        @State private var pulse = false
+        @Environment(\.colorScheme) private var colorScheme
 
         var body: some View {
-            HStack(spacing: 4) {
-                Image(systemName: iconName)
-                    .font(.caption2)
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(tint)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(tint.opacity(0.15))
+            AccessibleCapsuleBadge(
+                iconName: iconName,
+                title: title,
+                style: BadgeContrastStyle.forPriority(priority, scheme: colorScheme),
+                pulsing: pulsing,
+                accessibilityLabel: title
             )
-            .scaleEffect(pulsing ? (pulse ? 1.04 : 0.98) : 1)
-            .opacity(pulsing ? (pulse ? 1 : 0.9) : 1)
-            .onAppear {
-                if pulsing {
-                    pulse = true
-                }
-            }
-            .onChange(of: pulsing) { _, newValue in
-                pulse = newValue
-            }
-            .animation(pulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .easeInOut(duration: 0.2), value: pulse)
         }
     }
     
@@ -1029,7 +1322,7 @@ struct ContentView: View {
             )
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text(L("Новый дедлайн"))
+                    Text(L("Новая задача"))
                         .font(.headline.weight(.semibold))
                 }
                 ToolbarItem(placement: .cancellationAction) {
@@ -1072,7 +1365,7 @@ struct ContentView: View {
             // Repeating tasks should always recalculate priority for each cycle.
             priority = "Авто"
         } else {
-            priority = newPriority == "Авто" ? calculatePriority(for: newDate) : newPriority
+            priority = newPriority == "Авто" ? "Авто" : newPriority
         }
         let deadline = Deadline(
             id: "",
@@ -1096,66 +1389,340 @@ struct ContentView: View {
     }
     
     private var filterControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L("Фильтры"))
-                .font(.headline)
-            HStack {
-                Picker("Статус", selection: $filterStatus) {
-                    ForEach(statusOptions, id: \.value) { option in
-                        Text(option.label).tag(option.value)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(L("Фильтры"))
+                    .font(.headline)
+
+                if activeFilterCount > 0 {
+                    activeFilterBadge
                 }
-                .pickerStyle(.menu)
-                .accessibilityIdentifier("filterStatusPicker")
-                
-                Picker(L("Предмет"), selection: $filterSubject) {
-                    ForEach(subjectOptions, id: \.value) { option in
-                        Text(option.label).tag(option.value)
-                    }
-                }
-                .pickerStyle(.menu)
-                .accessibilityIdentifier("filterSubjectPicker")
+
+                Spacer()
             }
-            Picker("Сортировка", selection: $sortMode) {
-                ForEach(SortMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
+            .padding(.horizontal, 4)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(filterTrayTint)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(filterTrayStroke, lineWidth: 1)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .light ? 0.06 : 0.03),
+                                        Color.clear,
+                                        Color.black.opacity(colorScheme == .light ? 0.05 : 0.16)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .blendMode(.normal)
+                    }
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(filterTrayTopHighlight, lineWidth: 1)
+                            .mask(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.95), .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+                    .shadow(color: filterTrayShadow, radius: 14, x: 0, y: 8)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        Menu {
+                            Picker("Статус", selection: $filterStatus) {
+                                ForEach(statusOptions, id: \.value) { option in
+                                    Text(option.label).tag(option.value)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.seal")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text(selectedLabel(for: filterStatus, in: statusOptions))
+                                    .font(.subheadline.weight(.semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .opacity(0.8)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(chipForegroundColor(isActive: !filterStatus.isEmpty, accent: .indigo))
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(.regularMaterial)
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .fill(chipFillColor(isActive: !filterStatus.isEmpty, accent: .indigo))
+                                    )
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(chipStrokeColor(isActive: !filterStatus.isEmpty, accent: .indigo), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: chipShadowColor(isActive: !filterStatus.isEmpty, accent: .indigo), radius: !filterStatus.isEmpty ? 9 : 0, x: 0, y: !filterStatus.isEmpty ? 5 : 0)
+                        }
+                        .accessibilityIdentifier("filterStatusPicker")
+
+                        Menu {
+                            Picker(L("Предмет"), selection: $filterSubject) {
+                                ForEach(subjectOptions, id: \.value) { option in
+                                    Text(option.label).tag(option.value)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "books.vertical")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text(selectedLabel(for: filterSubject, in: subjectOptions))
+                                    .font(.subheadline.weight(.semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .opacity(0.8)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(chipForegroundColor(isActive: !filterSubject.isEmpty, accent: .indigo))
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(.regularMaterial)
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .fill(chipFillColor(isActive: !filterSubject.isEmpty, accent: .indigo))
+                                    )
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(chipStrokeColor(isActive: !filterSubject.isEmpty, accent: .indigo), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: chipShadowColor(isActive: !filterSubject.isEmpty, accent: .indigo), radius: !filterSubject.isEmpty ? 9 : 0, x: 0, y: !filterSubject.isEmpty ? 5 : 0)
+                        }
+                        .accessibilityIdentifier("filterSubjectPicker")
+
+                        Spacer()
+                            .frame(width: 4.5)
+
+                        Menu {
+                            Picker(L("Сортировка"), selection: $sortMode) {
+                                ForEach(SortMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.up.arrow.down.circle.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                Text(sortMode.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .opacity(0.86)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(chipForegroundColor(isActive: true, accent: .indigo, prominent: true))
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(.regularMaterial)
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .fill(chipFillColor(isActive: true, accent: .indigo, prominent: true))
+                                    )
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(chipStrokeColor(isActive: true, accent: .indigo, prominent: true), lineWidth: 1.1)
+                                    )
+                            )
+                            .shadow(color: chipShadowColor(isActive: true, accent: .indigo, prominent: true), radius: 11, x: 0, y: 6)
+                        }
+                        .accessibilityIdentifier("sortModePicker")
+
+                        if !filterStatus.isEmpty || !filterSubject.isEmpty {
+                            Button {
+                                filterStatus = ""
+                                filterSubject = ""
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .frame(width: 34, height: 34)
+                                    .foregroundStyle(Color.red.opacity(colorScheme == .light ? 0.95 : 0.9))
+                                .background(
+                                    Circle()
+                                        .fill(.regularMaterial)
+                                        .overlay(
+                                            Circle()
+                                                .fill(colorScheme == .light ? Color.red.opacity(0.22) : Color.red.opacity(0.3))
+                                        )
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.red.opacity(colorScheme == .light ? 0.58 : 0.66), lineWidth: 1.2)
+                                        )
+                                )
+                                    .shadow(color: Color.red.opacity(colorScheme == .light ? 0.22 : 0.32), radius: 9, x: 0, y: 4)
+                            }
+                            .accessibilityLabel(Text(L("Сбросить")))
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
+
+                HStack {
+                    LinearGradient(
+                        colors: [filterTrayEdgeMask, .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 20)
+                    .shadow(color: filterTrayEdgeSoftShadow, radius: 5, x: 2, y: 0)
+
+                    Spacer()
+
+                    LinearGradient(
+                        colors: [.clear, filterTrayEdgeMask],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 20)
+                    .shadow(color: filterTrayEdgeSoftShadow, radius: 5, x: -2, y: 0)
+                }
+                .allowsHitTesting(false)
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("sortModePicker")
+            .frame(height: 58)
         }
+    }
+
+    private var activeFilterBadge: some View {
+        let style = BadgeContrastStyle.forAccent(scheme: colorScheme)
+        return Text("\(activeFilterCount)")
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .foregroundStyle(style.foreground)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(style.background)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(style.stroke, lineWidth: 1)
+                    )
+            )
+            .accessibilityLabel(String(format: L("Активных фильтров: %d"), activeFilterCount))
+    }
+
+    private func selectedLabel(for value: String, in options: [(label: String, value: String)]) -> String {
+        options.first(where: { $0.value == value })?.label ?? options.first?.label ?? ""
+    }
+
+    private var filterTrayTint: Color {
+        colorScheme == .light ? Color.black.opacity(0.03) : Color.black.opacity(0.2)
+    }
+
+    private var filterTrayStroke: Color {
+        colorScheme == .light ? Color.black.opacity(0.08) : Color.white.opacity(0.1)
+    }
+
+    private var filterTrayTopHighlight: Color {
+        colorScheme == .light ? Color.white.opacity(0.55) : Color.white.opacity(0.1)
+    }
+
+    private var filterTrayShadow: Color {
+        colorScheme == .light ? Color.black.opacity(0.1) : Color.black.opacity(0.3)
+    }
+
+    private var filterTrayEdgeMask: Color {
+        colorScheme == .light ? Color.white.opacity(0.6) : Color.black.opacity(0.55)
+    }
+
+    private var filterTrayEdgeSoftShadow: Color {
+        colorScheme == .light ? Color.black.opacity(0.08) : .clear
+    }
+
+    private var activeFilterCount: Int {
+        var count = 0
+        if !filterStatus.isEmpty { count += 1 }
+        if !filterSubject.isEmpty { count += 1 }
+        return count
+    }
+
+    private var hasActiveFilters: Bool {
+        activeFilterCount > 0
+    }
+
+    private func resetFilters() {
+        filterStatus = ""
+        filterSubject = ""
+    }
+
+    private func chipFillColor(isActive: Bool, accent: Color, prominent: Bool = false) -> Color {
+        if isActive {
+            if prominent {
+                return colorScheme == .light ? accent.opacity(0.52) : accent.opacity(0.62)
+            }
+            return colorScheme == .light ? accent.opacity(0.44) : accent.opacity(0.54)
+        }
+        return colorScheme == .light ? Color.white.opacity(0.18) : Color.white.opacity(0.06)
+    }
+
+    private func chipStrokeColor(isActive: Bool, accent: Color, prominent: Bool = false) -> Color {
+        if isActive {
+            if prominent {
+                return accent.opacity(colorScheme == .light ? 0.82 : 0.88)
+            }
+            return accent.opacity(colorScheme == .light ? 0.72 : 0.8)
+        }
+        return Color.primary.opacity(colorScheme == .light ? 0.12 : 0.2)
+    }
+
+    private func chipForegroundColor(isActive: Bool, accent: Color, prominent: Bool = false) -> Color {
+        if isActive {
+            return colorScheme == .light ? Color.white.opacity(prominent ? 1.0 : 0.98) : Color.white.opacity(prominent ? 0.98 : 0.95)
+        }
+        return .primary
+    }
+
+    private func chipShadowColor(isActive: Bool, accent: Color, prominent: Bool = false) -> Color {
+        guard isActive else { return .clear }
+        if prominent {
+            return accent.opacity(colorScheme == .light ? 0.2 : 0.3)
+        }
+        return accent.opacity(colorScheme == .light ? 0.16 : 0.24)
     }
 
     // MARK: - Deadline List
     private var deadlineList: some View {
         Group {
-            if sections.isEmpty {
+            if horizontalSizeClass == .regular {
+                iPadDeadlineSplitView
+            } else if sections.isEmpty {
                 ScrollView {
-                    Group {
-                        if isInitialSyncInProgress || !hasCompletedInitialSync {
-                            initialSyncLoadingView
-                        } else {
-                            emptyDeadlinesView
-                        }
-                    }
+                    emptyStateForCurrentContext
                         .frame(maxWidth: .infinity)
                         .padding(.top, 56)
                         .padding(.horizontal, 24)
                 }
             } else {
                 List {
-                    ForEach(sections, id: \.title) { section in
-                        Section(header:
-                            Text(section.title)
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.primary)
-                                .textCase(nil)
-                                .padding(.top, 8)
-                        ) {
+                    ForEach(sections) { section in
+                        Section(header: deadlineSectionHeader(key: section.key, title: section.title)) {
                             ForEach(section.items) { deadline in
                                 deadlineRow(deadline)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.75)))
+                                    .transition(.opacity)
                             }
                         }
                     }
@@ -1168,24 +1735,171 @@ struct ContentView: View {
             await viewModel.syncNow()
         }
         .sheet(item: $detailDeadline) { deadline in
-            DeadlineDetailSheet(deadline: deadline)
+            DeadlineDetailSheet(
+                deadline: deadline,
+                viewModel: viewModel,
+                onEdit: {
+                    detailDeadline = nil
+                    editingDeadline = deadline
+                },
+                onComplete: { item in
+                    await completeDeadlineWithUndo(item)
+                }
+            )
         }
     }
 
-    private var initialSyncLoadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-                .scaleEffect(1.05)
+    private var splitSelectedDeadline: Deadline? {
+        guard let selectedSplitDeadlineID else { return nil }
+        return sections.flatMap(\.items).first { $0.id == selectedSplitDeadlineID }
+    }
 
-            Text(L("Синхронизация…"))
-                .font(.headline)
-                .foregroundStyle(.secondary)
+    private var iPadDeadlineSplitView: some View {
+        NavigationSplitView {
+            Group {
+                if sections.isEmpty {
+                    ScrollView {
+                        emptyStateForCurrentContext
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 56)
+                            .padding(.horizontal, 24)
+                    }
+                } else {
+                    List {
+                        ForEach(sections) { section in
+                            Section(header: deadlineSectionHeader(key: section.key, title: section.title)) {
+                                ForEach(section.items) { deadline in
+                                    iPadSplitDeadlineRow(
+                                        deadline,
+                                        isSelected: selectedSplitDeadlineID == deadline.id
+                                    )
+                                    .onTapGesture {
+                                        guard selectedSplitDeadlineID != deadline.id else { return }
+                                        selectedSplitDeadlineID = deadline.id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .environment(\.defaultMinListRowHeight, 1)
+                }
+            }
+            .navigationTitle(L("Задачи"))
+            .navigationSplitViewColumnWidth(min: 340, ideal: 420, max: 480)
+        } detail: {
+            if let deadline = splitSelectedDeadline {
+                DeadlineDetailSheet(
+                    deadline: deadline,
+                    viewModel: viewModel,
+                    isEmbeddedInSplitView: true,
+                    onEdit: {
+                        editingDeadline = deadline
+                    },
+                    onComplete: { item in
+                        await completeDeadlineWithUndo(item)
+                    }
+                )
+                .id(deadline.id)
+            } else {
+                ContentUnavailableView {
+                    Label(L("Выберите задачу"), systemImage: "list.bullet.rectangle")
+                } description: {
+                    Text(L("Нажмите на задачу слева, чтобы увидеть детали и действия"))
+                        .multilineTextAlignment(.center)
+                }
+            }
         }
-        .padding(.vertical, 16)
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: selectedSplitDeadlineID) { oldID, newID in
+            guard horizontalSizeClass == .regular, oldID != newID, newID != nil else { return }
+            lightHaptic()
+        }
+        .refreshable {
+            await viewModel.syncNow()
+        }
+        .onAppear {
+            syncSelectedSplitDeadlineIfNeeded()
+        }
+        .onChange(of: viewModel.deadlines.count) { _, _ in
+            syncSelectedSplitDeadlineIfNeeded()
+        }
+        .onChange(of: filterStatus) { _, _ in
+            syncSelectedSplitDeadlineIfNeeded()
+        }
+        .onChange(of: filterSubject) { _, _ in
+            syncSelectedSplitDeadlineIfNeeded()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            syncSelectedSplitDeadlineIfNeeded()
+        }
+    }
+
+    private func syncSelectedSplitDeadlineIfNeeded() {
+        guard horizontalSizeClass == .regular else { return }
+
+        let visible = sections.flatMap(\.items)
+        guard !visible.isEmpty else {
+            selectedSplitDeadlineID = nil
+            return
+        }
+
+        if let selectedSplitDeadlineID,
+           visible.contains(where: { $0.id == selectedSplitDeadlineID }) {
+            return
+        }
+
+        selectedSplitDeadlineID = visible.first?.id
+    }
+
+    private func openDeadlineDetail(_ deadline: Deadline) {
+        if horizontalSizeClass == .regular {
+            selectedSplitDeadlineID = deadline.id
+        } else {
+            detailDeadline = deadline
+        }
+    }
+
+    @ViewBuilder
+    private var emptyStateForCurrentContext: some View {
+        if hasActiveSearch {
+            searchEmptyDeadlinesView
+        } else if hasActiveFilters {
+            filteredEmptyDeadlinesView
+        } else {
+            emptyDeadlinesView
+        }
+    }
+
+    private var hasActiveSearch: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchResultsBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.indigo)
+            Text(String(format: L("Найдено: %d"), mainScreenDeadlines.count))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Text(L("Поиск по названию, категории и тегам"))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.indigo.opacity(0.08))
+        )
     }
 
     private var emptyDeadlinesView: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             Image(systemName: "bell.badge")
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(Color.indigo.opacity(0.9))
@@ -1194,24 +1908,199 @@ struct ContentView: View {
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
 
-            Text(L("Добавьте своё первое напоминание"))
+            Text(L("Добавьте задачу с дедлайном — Redloop напомнит и покажет срочность"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            Button {
+                isFormExpanded = true
+            } label: {
+                Text(L("Добавить первую задачу"))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.indigo)
+        }
+        .padding(.vertical, 16)
+    }
+
+    private var searchEmptyDeadlinesView: some View {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Color.indigo.opacity(0.9))
+
+            Text(L("Ничего не найдено"))
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+
+            Text(String(format: L("Нет результатов для «%@»"), query))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                clearSearch()
+            } label: {
+                Text(L("Очистить поиск"))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.indigo)
+        }
+        .padding(.vertical, 16)
+        .accessibilityIdentifier("searchEmptyState")
+    }
+
+    private func clearSearch() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isSearchExpanded = false
+            searchQuery = ""
+            isSearchFocused = false
+        }
+    }
+
+    private var filteredEmptyDeadlinesView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Color.indigo.opacity(0.9))
+
+            Text(L("Нет задач в этой категории."))
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("filteredEmptyState")
+
+            Text(L("Смените статус или предмет — или сбросьте фильтры"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                resetFilters()
+            } label: {
+                Text(L("Сбросить фильтры"))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.indigo)
         }
         .padding(.vertical, 16)
     }
     
     @ViewBuilder
+    private func iPadSplitDeadlineRow(_ deadline: Deadline, isSelected: Bool) -> some View {
+        let priorityValue = priority(for: deadline)
+        let tintColor = color(for: deadline, resolvedPriority: priorityValue)
+        let effectiveDate = effectiveDueDate(for: deadline)
+        let isUrgent = deadline.statusType == .inProgress &&
+            (isOverdue(deadline, effectiveDate: effectiveDate) || isDueToday(deadline, effectiveDate: effectiveDate))
+        let selectedFillOpacity = colorScheme == .light ? 0.10 : 0.16
+        let titleColor = Color.primary
+        let subtitleColor = Color.secondary
+
+        HStack(alignment: .center, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(tintColor.opacity(isSelected ? 1 : 0.75))
+                .frame(width: isSelected ? 4 : 3)
+                .frame(maxHeight: 44)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(deadline.title)
+                        .font(.body.weight(isSelected ? .semibold : .regular))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(2)
+
+                    if deadline.repeatType != "none" {
+                        Image(systemName: "repeat")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.indigo)
+                    }
+                }
+
+                Text(compactCardSubtitle(for: deadline))
+                    .font(.caption)
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+
+                if isUrgent, shouldShowPriorityBadge(priorityValue) {
+                    Text(priorityBadgeTitle(for: deadline, resolvedPriority: priorityValue))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(tintColor)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if isSelected {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.indigo)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    isSelected
+                        ? tintColor.opacity(selectedFillOpacity)
+                        : Color(.secondarySystemGroupedBackground)
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(
+                    isSelected ? tintColor.opacity(colorScheme == .light ? 0.45 : 0.55) : Color.primary.opacity(0.06),
+                    lineWidth: isSelected ? 1.5 : 0.5
+                )
+        }
+        .animation(.easeInOut(duration: 0.18), value: isSelected)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(deadlineAccessibilityLabel(for: deadline, priority: priorityValue))
+        .accessibilityHint(L("Открыть детали задачи"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            trailingSwipeActions(for: deadline)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            leadingSwipeActions(for: deadline)
+        }
+        .contextMenu {
+            contextMenu(for: deadline)
+        }
+    }
+
+    @ViewBuilder
     private func deadlineRow(_ deadline: Deadline) -> some View {
         let priorityValue = priority(for: deadline)
+        let tintColor = color(for: deadline, resolvedPriority: priorityValue)
+        let effectiveDate = effectiveDueDate(for: deadline)
+        let shouldPulse = deadline.statusType == .inProgress &&
+            (isOverdue(deadline, effectiveDate: effectiveDate) || isDueToday(deadline, effectiveDate: effectiveDate))
+        let displayTags = nonDuplicateTags(for: deadline)
 
-        DeadlineGlassBox(deadline: deadline, color: color(for: deadline)) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
+        DeadlineGlassBox(
+            deadline: deadline,
+            color: tintColor,
+            reducedEffects: priorityValue == "Низкий"
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
                     Text(deadline.title)
-                        .font(.system(size: 19, weight: .bold))
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.9)
                         .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
                     if deadline.repeatType != "none" {
                         Image(systemName: "repeat")
@@ -1223,26 +2112,29 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("\(deadline.subject) — \(formattedDate(deadline)) — \(localizedStatus(deadline.status))")
+                Text(compactCardSubtitle(for: deadline))
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.75))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
                     .shadow(color: .black.opacity(0.03), radius: 1, x: 0, y: 0.5)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !priorityValue.isEmpty {
+                if shouldShowPriorityBadge(priorityValue) {
                     PriorityBadge(
-                        iconName: priorityIcon(for: deadline),
-                        title: localizedPriority(priorityValue),
-                        tint: color(for: deadline),
-                        pulsing: false
+                        iconName: priorityIcon(for: deadline, resolvedPriority: priorityValue),
+                        title: priorityBadgeTitle(for: deadline, resolvedPriority: priorityValue),
+                        priority: priorityValue,
+                        pulsing: shouldPulse
                     )
-                    .shadow(color: color(for: deadline).opacity(0.15), radius: 3, x: 0, y: 2)
+                    .accessibilityIdentifier("priorityBadge")
+                    .shadow(color: tintColor.opacity(0.15), radius: 3, x: 0, y: 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if !deadline.tags.isEmpty {
+                if !displayTags.isEmpty {
                     HStack(spacing: 6) {
-                        ForEach(deadline.tags, id: \.self) { tag in
+                        ForEach(displayTags, id: \.self) { tag in
                             tagBadge(for: tag)
                         }
                     }
@@ -1253,6 +2145,13 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openDeadlineDetail(deadline)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(deadlineAccessibilityLabel(for: deadline, priority: priorityValue))
+        .accessibilityHint(L("Открыть детали задачи"))
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -1269,13 +2168,7 @@ struct ContentView: View {
     @ViewBuilder
     private func trailingSwipeActions(for deadline: Deadline) -> some View {
         Button(role: .destructive) {
-            mediumHaptic()
-            Task {
-                var archived = deadline
-                archived.statusType = .cancelled
-                archived.deletedAt = Date()
-                await viewModel.updateDeadline(archived)
-            }
+            Task { await deleteDeadlineWithUndo(deadline) }
         } label: {
             Label(L("Удалить"), systemImage: "trash")
         }
@@ -1283,7 +2176,6 @@ struct ContentView: View {
         Button {
             lightHaptic()
             editingDeadline = deadline
-            isEditing = true
         } label: {
             Label(L("Редактировать"), systemImage: "pencil")
         }
@@ -1293,13 +2185,8 @@ struct ContentView: View {
     @ViewBuilder
     private func leadingSwipeActions(for deadline: Deadline) -> some View {
         if deadline.statusType != .completed {
-            Button {
-                lightHaptic()
-                Task {
-                    var updated = deadline
-                    updated.statusType = .completed
-                    await viewModel.updateDeadline(updated)
-                }
+            Button(role: .destructive) {
+                Task { await completeDeadlineWithUndo(deadline) }
             } label: {
                 Label(L("Выполнен"), systemImage: "checkmark.circle.fill")
             }
@@ -1310,7 +2197,7 @@ struct ContentView: View {
     @ViewBuilder
     private func contextMenu(for deadline: Deadline) -> some View {
         Button {
-            detailDeadline = deadline
+            openDeadlineDetail(deadline)
         } label: {
             Label(L("Подробнее"), systemImage: "info.circle")
         }
@@ -1318,38 +2205,33 @@ struct ContentView: View {
         Button {
             lightHaptic()
             editingDeadline = deadline
-            isEditing = true
         } label: {
             Label(L("Редактировать"), systemImage: "pencil")
         } 
         
         if deadline.statusType != .completed {
             Button {
-                lightHaptic()
-                Task {
-                    var updated = deadline
-                    updated.statusType = .completed
-                    await viewModel.updateDeadline(updated)
-                }
+                Task { await completeDeadlineWithUndo(deadline) }
             } label: {
                 Label(L("Отметить выполненным"), systemImage: "checkmark.circle")
             }.tint(.green)
         }
         
         Button(role: .destructive) {
-            mediumHaptic()
-            Task {
-                var archived = deadline
-                archived.statusType = .cancelled
-                archived.deletedAt = Date()
-                await viewModel.updateDeadline(archived)
-            }
+            Task { await deleteDeadlineWithUndo(deadline) }
         } label: {
             Label(L("Удалить"), systemImage: "trash")
         } .tint(.red)
     }
     
-    private var sections: [(title: String, items: [Deadline])] {
+    private struct DeadlineListSection: Identifiable {
+        let key: String
+        let title: String
+        let items: [Deadline]
+        var id: String { key }
+    }
+
+    private var sections: [DeadlineListSection] {
         switch sortMode {
         case .date:
             return sectionsByDate()
@@ -1358,20 +2240,55 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private func deadlineSectionHeader(key: String, title: String) -> some View {
+        HStack(spacing: 6) {
+            if key == "Просрочено" {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.red)
+            } else if key == "Горит сегодня" {
+                Image(systemName: "flame.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
+            Text(title)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+        }
+        .textCase(nil)
+        .padding(.top, (key == "Просрочено" || key == "Горит сегодня") ? 4 : 8)
+        .padding(.bottom, (key == "Просрочено" || key == "Горит сегодня") ? 0 : 2)
+    }
+
     private var mainScreenDeadlines: [Deadline] {
-        viewModel.deadlines.filter { $0.deletedAt == nil }
+        let base = viewModel.deadlines.filter { $0.deletedAt == nil }
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return base }
+        let lowered = query.lowercased()
+        return base.filter { deadline in
+            deadline.title.lowercased().contains(lowered)
+                || deadline.subject.lowercased().contains(lowered)
+                || deadline.notes.lowercased().contains(lowered)
+                || deadline.localizedSubjectName.lowercased().contains(lowered)
+                || deadline.tags.contains { $0.lowercased().contains(lowered) }
+        }
     }
     
-    private func sectionsByDate() -> [(title: String, items: [Deadline])] {
+    private func sectionsByDate() -> [DeadlineListSection] {
         var groups: [String: [Deadline]] = [:]
         let calendar = Calendar.current
         let today = Date()
+        let dateCache = buildEffectiveDateCache(for: mainScreenDeadlines)
         
         for deadline in mainScreenDeadlines {
-            guard let date = parsedDeadlineDate(deadline.dueDate) else { continue }
+            guard let date = dateCache[deadline.id] else { continue }
 
             let key: String
-            if isBurningToday(deadline) {
+            if isOverdue(deadline, effectiveDate: date) {
+                key = "Просрочено"
+            } else if isDueToday(deadline, effectiveDate: date) {
                 key = "Горит сегодня"
             } else if calendar.isDateInToday(date) {
                 key = "Сегодня"
@@ -1384,30 +2301,31 @@ struct ContentView: View {
             groups[key, default: []].append(deadline)
         }
         
-        let predefinedOrder = ["Горит сегодня", "Сегодня", "На этой неделе", "Позже"]
-        var result: [(title: String, items: [Deadline])] = []
+        let predefinedOrder = ["Просрочено", "Горит сегодня", "Сегодня", "На этой неделе", "Позже"]
+        var result: [DeadlineListSection] = []
         
         for key in predefinedOrder {
             if let items = groups.removeValue(forKey: key), !items.isEmpty {
-                result.append((L(key), sortByStatus(items)))
+                result.append(DeadlineListSection(key: key, title: L(key), items: sortByStatus(items, dateCache: dateCache)))
             }
         }
         
         for key in groups.keys.sorted() {
             if let items = groups[key] {
-                result.append((L(key), sortByStatus(items)))
+                result.append(DeadlineListSection(key: key, title: L(key), items: sortByStatus(items, dateCache: dateCache)))
             }
         }
         
         return result
     }
     
-    private func sectionsByTag() -> [(title: String, items: [Deadline])] {
+    private func sectionsByTag() -> [DeadlineListSection] {
         var groups: [String: [Deadline]] = [:]
         for deadline in mainScreenDeadlines {
             let key = deadline.tags.sorted().first ?? "Без тегов"
             groups[key, default: []].append(deadline)
         }
+        let dateCache = buildEffectiveDateCache(for: mainScreenDeadlines)
         let sortedKeys = groups.keys.sorted { lhs, rhs in
             switch (lhs == "Без тегов", rhs == "Без тегов") {
             case (true, true): return lhs < rhs
@@ -1419,54 +2337,65 @@ struct ContentView: View {
         }
         return sortedKeys.compactMap { key in
             guard let items = groups[key] else { return nil }
-            return (title: L(key), items: sortByDueDate(items))
+            return DeadlineListSection(key: key, title: L(key), items: sortByDueDate(items, dateCache: dateCache))
         }
     }
     
-    private func sortByStatus(_ deadlines: [Deadline]) -> [Deadline] {
+    private func sortByStatus(_ deadlines: [Deadline], dateCache: [String: Date]) -> [Deadline] {
         return deadlines.sorted { lhs, rhs in
             let lhsStatus = lhs.statusType.sortOrder
             let rhsStatus = rhs.statusType.sortOrder
             if lhsStatus != rhsStatus { return lhsStatus < rhsStatus }
 
-            let lhsUrgency = urgencyRank(lhs)
-            let rhsUrgency = urgencyRank(rhs)
+            let lhsUrgency = urgencyRank(lhs, effectiveDate: dateCache[lhs.id])
+            let rhsUrgency = urgencyRank(rhs, effectiveDate: dateCache[rhs.id])
             if lhsUrgency != rhsUrgency { return lhsUrgency < rhsUrgency }
 
             if lhs.subject != rhs.subject { return lhs.subject < rhs.subject }
-            return compareByDueDate(lhs, rhs)
+            return compareByDueDate(lhs, rhs, dateCache: dateCache)
         }
     }
     
-    private func sortByDueDate(_ deadlines: [Deadline]) -> [Deadline] {
+    private func sortByDueDate(_ deadlines: [Deadline], dateCache: [String: Date]) -> [Deadline] {
         deadlines.sorted { lhs, rhs in
-            compareByDueDate(lhs, rhs)
+            compareByDueDate(lhs, rhs, dateCache: dateCache)
         }
     }
     
-    private func compareByDueDate(_ lhs: Deadline, _ rhs: Deadline) -> Bool {
-        let lhsDate = parsedDeadlineDate(lhs.dueDate) ?? .distantPast
-        let rhsDate = parsedDeadlineDate(rhs.dueDate) ?? .distantPast
+    private func compareByDueDate(_ lhs: Deadline, _ rhs: Deadline, dateCache: [String: Date]? = nil) -> Bool {
+        let lhsDate = dateCache?[lhs.id] ?? effectiveDueDate(for: lhs) ?? .distantPast
+        let rhsDate = dateCache?[rhs.id] ?? effectiveDueDate(for: rhs) ?? .distantPast
         if lhsDate != rhsDate {
             return lhsDate < rhsDate
         }
         return lhs.title < rhs.title
     }
 
-    private func isBurningToday(_ deadline: Deadline) -> Bool {
-            guard deadline.statusType == .inProgress,
-              let dueDate = parsedDeadlineDate(deadline.dueDate) else { return false }
-
-        let calendar = Calendar.current
-        let todayStart = calendar.startOfDay(for: Date())
-        let dueStart = calendar.startOfDay(for: dueDate)
-
-        return dueStart <= todayStart
+    private func isOverdue(_ deadline: Deadline, effectiveDate: Date? = nil) -> Bool {
+        if let effectiveDate {
+            let calendar = Calendar.current
+            let todayStart = calendar.startOfDay(for: Date())
+            let dueStart = calendar.startOfDay(for: effectiveDate)
+            guard deadline.statusType == .inProgress else { return false }
+            return dueStart < todayStart
+        }
+        return deadline.isOverdue()
     }
 
-    private func urgencyRank(_ deadline: Deadline) -> Int {
-            guard deadline.statusType == .inProgress,
-              let dueDate = parsedDeadlineDate(deadline.dueDate) else { return 5 }
+    private func isDueToday(_ deadline: Deadline, effectiveDate: Date? = nil) -> Bool {
+        if let effectiveDate {
+            let calendar = Calendar.current
+            let todayStart = calendar.startOfDay(for: Date())
+            let dueStart = calendar.startOfDay(for: effectiveDate)
+            guard deadline.statusType == .inProgress else { return false }
+            return dueStart == todayStart
+        }
+        return deadline.isDueToday()
+    }
+
+    private func urgencyRank(_ deadline: Deadline, effectiveDate: Date? = nil) -> Int {
+                        guard deadline.statusType == .inProgress,
+                            let dueDate = effectiveDate ?? effectiveDueDate(for: deadline) else { return 5 }
 
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
@@ -1479,14 +2408,15 @@ struct ContentView: View {
         if days <= 7 { return 3 }
         return 4
     }
-    private func color(for deadline: Deadline) -> Color {
+    private func color(for deadline: Deadline, resolvedPriority: String? = nil) -> Color {
         switch deadline.statusType {
         case .completed:
             return .green
         case .cancelled:
             return .gray
         default:
-            switch priority(for: deadline) {
+            let priorityValue = resolvedPriority ?? priority(for: deadline)
+            switch priorityValue {
             case "Высокий": return .red
             case "Средний": return .orange
             case "Низкий": return .yellow
@@ -1522,29 +2452,68 @@ struct ContentView: View {
         deadlineDateFormatter.date(from: value) ?? legacyDeadlineDateFormatter.date(from: value)
     }
 
-    // MARK: - Priority Helpers
-    private func calculatePriority(for date: Date) -> String {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let due = calendar.startOfDay(for: date)
-        guard let days = calendar.dateComponents([.day], from: today, to: due).day else {
-            return "Низкий"
+    private func effectiveDueDate(for deadline: Deadline, referenceDate: Date = Date()) -> Date? {
+        guard let rawDate = parsedDeadlineDate(deadline.dueDate) else { return nil }
+        let normalized = deadline.normalizedDueDateForRecurrence(referenceDate: referenceDate) ?? rawDate
+        if !deadline.hasTimeInDueDate {
+            return Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: normalized) ?? normalized
         }
-        if days <= 2 {
-            return "Высокий"
-        } else if days <= 7 {
-            return "Средний"
-        } else {
-            return "Низкий"
-        }
+        return normalized
     }
 
-    private func priority(for deadline: Deadline) -> String {
-        if let date = parsedDeadlineDate(deadline.dueDate) {
-            let effectiveDate = deadline.normalizedDueDateForRecurrence(referenceDate: Date()) ?? date
-            return calculatePriority(for: effectiveDate)
+    private func buildEffectiveDateCache(for deadlines: [Deadline]) -> [String: Date] {
+        let now = Date()
+        var cache: [String: Date] = [:]
+        cache.reserveCapacity(deadlines.count)
+
+        for deadline in deadlines {
+            if let date = effectiveDueDate(for: deadline, referenceDate: now) {
+                cache[deadline.id] = date
+            }
         }
-        return deadline.priority
+
+        return cache
+    }
+
+    // MARK: - Priority Helpers
+    private func priority(for deadline: Deadline) -> String {
+        deadline.resolvedPriority()
+    }
+
+    private func shouldShowPriorityBadge(_ priority: String) -> Bool {
+        priority == "Высокий" || priority == "Средний"
+    }
+
+    private func priorityBadgeTitle(for deadline: Deadline, resolvedPriority: String) -> String {
+        if deadline.usesAutoPriority {
+            return "\(localizedPriority(resolvedPriority)) · \(L("от срока"))"
+        }
+        return localizedPriority(resolvedPriority)
+    }
+
+    private func deadlineAccessibilityLabel(for deadline: Deadline, priority: String) -> String {
+        var parts = [deadline.title, compactCardSubtitle(for: deadline)]
+        if shouldShowPriorityBadge(priority) {
+            parts.append(priorityBadgeTitle(for: deadline, resolvedPriority: priority))
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private func compactCardSubtitle(for deadline: Deadline) -> String {
+        "\(deadline.localizedSubjectName) · \(formattedDate(deadline))"
+    }
+
+    private func nonDuplicateTags(for deadline: Deadline) -> [String] {
+        let subjectRaw = deadline.subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subjectLocalized = deadline.localizedSubjectName
+        return deadline.tags.filter { tag in
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return false }
+            if trimmed.caseInsensitiveCompare(subjectRaw) == .orderedSame { return false }
+            if trimmed == subjectLocalized { return false }
+            if trimmed.caseInsensitiveCompare(deadline.subject) == .orderedSame { return false }
+            return true
+        }
     }
 
     private func localizedPriority(_ priority: String) -> String {
@@ -1565,14 +2534,15 @@ struct ContentView: View {
         }
     }
     
-    private func priorityIcon(for deadline: Deadline) -> String {
+    private func priorityIcon(for deadline: Deadline, resolvedPriority: String? = nil) -> String {
         switch deadline.statusType {
         case .completed:
             return "checkmark.circle.fill"
         case .cancelled:
             return "xmark.circle.fill"
         default:
-            switch priority(for: deadline) {
+            let priorityValue = resolvedPriority ?? priority(for: deadline)
+            switch priorityValue {
             case "Высокий": return "exclamationmark.triangle.fill"
             case "Средний": return "exclamationmark.circle.fill"
             case "Низкий": return "clock.fill"
@@ -1583,24 +2553,58 @@ struct ContentView: View {
 
     @ViewBuilder
     private func tagBadge(for tag: String) -> some View {
-        Text(L(tag))
-            .font(.caption2)
-            .fontWeight(.medium)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 10)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.indigo.opacity(0.15))
-
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.indigo.opacity(0.25), lineWidth: 1)
-                }
-            )
-            .foregroundStyle(Color.indigo)
-            .shadow(color: Color.indigo.opacity(0.15), radius: 3, x: 0, y: 1)
+        AccessibleTagBadge(title: L(tag))
     }
     
+    private func registerUndo(for deadline: Deadline, kind: UndoableDeadlineAction.Kind) {
+        undoDismissTask?.cancel()
+        withAnimation(undoToastAppearAnimation) {
+            pendingUndo = UndoableDeadlineAction(kind: kind, snapshot: deadline)
+        }
+        undoDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await MainActor.run {
+                withAnimation(undoToastDismissAnimation) {
+                    pendingUndo = nil
+                }
+            }
+        }
+    }
+
+    private func undoDeadlineAction() async {
+        undoDismissTask?.cancel()
+        guard let action = pendingUndo else { return }
+        withAnimation(undoToastDismissAnimation) {
+            pendingUndo = nil
+        }
+        lightHaptic(intensity: 0.75)
+        await viewModel.updateDeadline(action.snapshot)
+    }
+
+    private func completeDeadlineWithUndo(_ deadline: Deadline) async {
+        let effectiveDate = effectiveDueDate(for: deadline)
+        let wasOverdue = isOverdue(deadline, effectiveDate: effectiveDate)
+        registerUndo(for: deadline, kind: UndoableDeadlineAction.Kind.completed)
+        if wasOverdue {
+            successHaptic()
+        } else {
+            lightHaptic()
+        }
+        var updated = deadline
+        updated.statusType = .completed
+        updated.deletedAt = updated.deletedAt ?? Date()
+        await viewModel.updateDeadline(updated)
+    }
+
+    private func deleteDeadlineWithUndo(_ deadline: Deadline) async {
+        registerUndo(for: deadline, kind: UndoableDeadlineAction.Kind.deleted)
+        mediumHaptic()
+        var archived = deadline
+        archived.statusType = .cancelled
+        archived.deletedAt = Date()
+        await viewModel.updateDeadline(archived)
+    }
+
     private func fetchDeadlinesWithCurrentFilters() async {
         viewModel.configureIfNeeded(context: modelContext)
         await viewModel.fetchDeadlines(status: filterStatus, subject: filterSubject)
@@ -1614,6 +2618,35 @@ struct ContentView: View {
     private func mediumHaptic(intensity: CGFloat = 0.8) {
         let haptic = UIImpactFeedbackGenerator(style: .medium)
         haptic.impactOccurred(intensity: intensity)
+    }
+
+    private func successHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
+    }
+
+    private func handleDeadlineExternalAction(_ notification: Notification) {
+        guard let action = notification.userInfo?["action"] as? String else { return }
+        if action == "complete", let id = notification.userInfo?["id"] as? String {
+            if let deadline = viewModel.deadlines.first(where: { $0.id == id && $0.deletedAt == nil }) {
+                Task { await completeDeadlineWithUndo(deadline) }
+            } else {
+                Task { await viewModel.completeDeadline(id: id) }
+            }
+        } else if action == "openPressure" {
+            if subscriptionManager.isPressureProUnlocked {
+                selectedTab = .pressure
+            } else {
+                showPressurePaywall = true
+            }
+        }
+    }
+
+    private func pressureTabHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.warning)
     }
 
     private func rescheduleProNotificationsIfNeeded() {
@@ -1638,9 +2671,48 @@ struct ContentView: View {
     }
 }
 
+private struct TasksPressureHintBanner: View {
+    var onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .font(.body)
+                .foregroundStyle(.indigo)
+
+            Text(L("Задачи показывают сроки по календарю. Режим давления — аналитика критичных 24 и 72 часов."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.body)
+                    .foregroundStyle(.secondary.opacity(0.85))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L("Закрыть")))
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.indigo.opacity(0.22), lineWidth: 1)
+                )
+        )
+    }
+}
+
 struct PressureModeView: View {
     let deadlines: [Deadline]
     let deadlineDateFormatter: DateFormatter
+    var showsTasksPressureHint: Bool = false
+    var entranceToken: Int = 0
+    var onDismissTasksPressureHint: (() -> Void)? = nil
+    var onCompleteDeadline: ((Deadline) -> Void)? = nil
+    private let actionPlanner = PressureActionPlanner()
     private let legacyDeadlineDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1649,14 +2721,20 @@ struct PressureModeView: View {
         return formatter
     }()
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var criticalGlow = false
     @State private var pressurePulse = false
+    @State private var contentVisible = false
     @State private var now = Date()
     @State private var lastUrgencyLevel: UrgencyLevel = .green
     @State private var shakeOffset: CGFloat = 0
     @State private var lastShakeAt: Date = .distantPast
     @State private var isShaking = false
     @State private var didTrackCtaImpression = false
+
+    private var actionPlan: PressureActionPlan {
+        actionPlanner.makePlan(from: deadlines, now: now)
+    }
 
     private typealias DeadlineDue = (deadline: Deadline, due: Date)
 
@@ -1697,10 +2775,32 @@ struct PressureModeView: View {
             }
             .filter { (item: DeadlineDue) in
                 let remaining = item.due.timeIntervalSince(now)
-                return remaining <= 72 * 3600
+                return remaining > 0 && remaining <= 72 * 3600
             }
             .sorted { (lhs: DeadlineDue, rhs: DeadlineDue) in
-                lhs.due < rhs.due
+                let lhsPriority = priorityRank(lhs.deadline.resolvedPriority())
+                let rhsPriority = priorityRank(rhs.deadline.resolvedPriority())
+                if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+                return lhs.due < rhs.due
+            }
+            .prefix(3)
+            .map { $0.deadline }
+    }
+
+    private var overdueDeadlines: [Deadline] {
+        activeDeadlines
+            .compactMap { deadline -> DeadlineDue? in
+                guard let due = dueDateEndOfDay(deadline) else { return nil }
+                return (deadline: deadline, due: due)
+            }
+            .filter { (item: DeadlineDue) in
+                item.due < now
+            }
+            .sorted { (lhs: DeadlineDue, rhs: DeadlineDue) in
+                let lhsPriority = priorityRank(lhs.deadline.resolvedPriority())
+                let rhsPriority = priorityRank(rhs.deadline.resolvedPriority())
+                if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+                return lhs.due < rhs.due
             }
             .prefix(3)
             .map { $0.deadline }
@@ -1721,25 +2821,81 @@ struct PressureModeView: View {
     private var urgencyLevel: UrgencyLevel {
         guard let nearest = nearestDeadline else { return .green }
         let hours = nearest.due.timeIntervalSince(now) / 3600
-        if hours <= 12 { return .critical }
-        if hours <= 24 { return .red }
-        if hours <= 72 { return .yellow }
-        return .green
+        let upcomingWorkload = upcoming72Workload
+
+        var score = basePressureScore(hours: hours)
+
+        if nearest.deadline.resolvedPriority() == "Высокий" && hours <= 24 {
+            score += 1
+        }
+
+        if upcomingWorkload >= 4 {
+            score += 1
+        }
+
+        switch score {
+        case 3...: return .critical
+        case 2: return .red
+        case 1: return .yellow
+        default: return .green
+        }
     }
 
-    private var remainingText: String {
-        guard let nearest = nearestDeadline else { return L("Дедлайнов нет") }
+    private var upcoming72Workload: Double {
+        activeDeadlines
+            .compactMap { deadline -> (deadline: Deadline, due: Date)? in
+                guard let due = dueDateEndOfDay(deadline) else { return nil }
+                return (deadline, due)
+            }
+            .filter { item in
+                let remaining = item.due.timeIntervalSince(now)
+                return remaining > 0 && remaining <= 72 * 3600
+            }
+            .reduce(0) { partial, item in
+                partial + workloadWeight(for: item.deadline)
+            }
+    }
+
+    private func workloadWeight(for deadline: Deadline) -> Double {
+        switch deadline.resolvedPriority() {
+        case "Высокий": return 2
+        case "Средний": return 1
+        case "Низкий": return 0.5
+        default: return 1
+        }
+    }
+
+    private func basePressureScore(hours: Double) -> Int {
+        if hours <= 12 { return 2 }
+        if hours <= 24 { return 1 }
+        if hours <= 72 { return 1 }
+        return 0
+    }
+
+    private var remainingTitle: String {
+        guard let nearest = nearestDeadline else { return L("Задач нет") }
         let remaining = nearest.due.timeIntervalSince(now)
         if remaining <= 0 {
             let overdueDuration = localizedDurationString(from: max(-remaining, 60), maximumUnitCount: 2)
             return String(format: L("Просрочен на %@"), overdueDuration)
         }
-        let duration = localizedDurationString(from: max(remaining, 60), maximumUnitCount: 3)
-        let hasDays = remaining >= 86_400
-        if hasDays {
-            return String(format: L("%@ до дедлайна"), duration)
+
+        if shouldShowDateSummary(remaining: remaining) {
+            return String(format: L("Ближайшая задача — %@"), localizedShortDate(nearest.due))
         }
-        return String(format: L("Осталось %@"), duration)
+
+        let duration = localizedFullDurationString(from: max(remaining, 60), maximumUnitCount: 2)
+        return String(format: L("%@ до задачи"), duration)
+    }
+
+    private var remainingSubtitle: String? {
+        guard let nearest = nearestDeadline else { return nil }
+        let remaining = nearest.due.timeIntervalSince(now)
+        guard remaining > 0 else { return nil }
+
+        guard shouldShowDateSummary(remaining: remaining) else { return nil }
+        let daysText = localizedDaysString(from: remaining)
+        return String(format: L("Осталось %@"), daysText)
     }
 
     private var timeProgress: Double {
@@ -1771,7 +2927,11 @@ struct PressureModeView: View {
     }
 
     private var progressPercent: Int {
-        min(max(Int((timeProgress * 100).rounded()), 0), 100)
+        let raw = min(max(Int((timeProgress * 100).rounded()), 0), 100)
+        if remainingSeconds > 0 {
+            return min(raw, 99)
+        }
+        return raw
     }
 
     private var shouldAccentMaxPressure: Bool {
@@ -1806,26 +2966,45 @@ struct PressureModeView: View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(L("Режим давления"))
-                            .font(.title2.weight(.semibold))
+                    if showsTasksPressureHint {
+                        TasksPressureHintBanner {
+                            onDismissTasksPressureHint?()
+                        }
+                    }
 
-                        Text(remainingText)
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
-                            .foregroundStyle(pressureAccentColor)
-                            .offset(x: shakeOffset)
-                            .scaleEffect(shouldPulseRemainingText ? (pressurePulse ? 1.03 : 0.98) : 1)
-                            .shadow(
-                                color: (shouldAccentMaxPressure || shouldAccentNearMaxPressure || overdueSeconds > 0) ? pressureAccentColor.opacity(criticalGlow ? 0.4 : 0.18) : .clear,
-                                radius: (shouldAccentMaxPressure || shouldAccentNearMaxPressure || overdueSeconds > 0) ? 10 : 0,
-                                x: 0,
-                                y: 0
-                            )
-                            .contentTransition(.numericText())
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(remainingTitle)
+                                .font(.largeTitle.weight(.bold))
+                                .fontDesign(.rounded)
+                                .foregroundStyle(pressureAccentColor)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.65)
+                                .offset(x: shakeOffset)
+                                .scaleEffect(shouldPulseRemainingText ? (pressurePulse ? 1.03 : 0.98) : 1)
+                                .shadow(
+                                    color: (shouldAccentMaxPressure || shouldAccentNearMaxPressure || overdueSeconds > 0) ? pressureAccentColor.opacity(criticalGlow ? 0.4 : 0.18) : .clear,
+                                    radius: (shouldAccentMaxPressure || shouldAccentNearMaxPressure || overdueSeconds > 0) ? 10 : 0,
+                                    x: 0,
+                                    y: 0
+                                )
+                                .contentTransition(.numericText())
+
+                            if let subtitle = remainingSubtitle {
+                                Text(subtitle)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                if urgencyLevel == .green {
+                                    Text(L("Времени достаточно."))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(L("Прогресс"))
+                                Text(L("Давление по сроку"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -1858,18 +3037,42 @@ struct PressureModeView: View {
                                     .stroke(urgencyLevel.color.opacity(0.3), lineWidth: 1)
                             )
                     )
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(L("Режим давления"))
+
+                    PressureActionPlanSection(plan: actionPlan, onComplete: onCompleteDeadline)
 
                     VStack(alignment: .leading, spacing: 12) {
+                        if !overdueDeadlines.isEmpty {
+                            Text(L("Просроченные"))
+                                .font(.headline)
+
+                            ForEach(overdueDeadlines) { deadline in
+                                pressureCard(deadline)
+                            }
+                        }
+
                         Text(L("Ближайшие 72 часа"))
                             .font(.headline)
 
                         if burning72Hours.isEmpty {
-                            Text(L("Срочных дедлайнов пока нет"))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(16)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(L("Срочных задач нет"))
+                                    .font(.subheadline.weight(.semibold))
+                                Text(L("Можно расслабиться."))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color(.secondarySystemBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .stroke(urgencyLevel.color.opacity(0.35), lineWidth: 1)
+                                    )
+                            )
                         } else {
                             ForEach(burning72Hours) { deadline in
                                 pressureCard(deadline)
@@ -1877,9 +3080,13 @@ struct PressureModeView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, horizontalSizeClass == .regular ? 32 : 16)
                 .padding(.vertical, 14)
+                .iPadReadableContent(maxWidth: 980)
+                .opacity(contentVisible ? 1 : 0)
+                .offset(y: contentVisible ? 0 : 14)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(backgroundGradient)
             .navigationTitle(L("Режим давления"))
             .navigationBarTitleDisplayMode(.inline)
@@ -1887,9 +3094,18 @@ struct PressureModeView: View {
                 now = Date()
                 lastUrgencyLevel = urgencyLevel
                 restartPressureAnimations()
+                withAnimation(.easeOut(duration: 0.35)) {
+                    contentVisible = true
+                }
                 if !didTrackCtaImpression {
                     PressureABAnalytics.shared.trackCtaImpression()
                     didTrackCtaImpression = true
+                }
+            }
+            .onChange(of: entranceToken) { _, _ in
+                contentVisible = false
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                    contentVisible = true
                 }
             }
             .onChange(of: urgencyLevel) { oldValue, newValue in
@@ -2010,29 +3226,17 @@ struct PressureModeView: View {
                     .foregroundStyle(level.color)
             }
 
-            Text(deadline.subject)
+            Text(deadline.localizedSubjectName)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
             if isHighPriority {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                    Text(L("Высокий"))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.orange)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(Color.orange.opacity(0.16))
+                AccessibleCapsuleBadge(
+                    iconName: "exclamationmark.triangle.fill",
+                    title: L("Высокий"),
+                    style: BadgeContrastStyle.forPriority("Высокий", scheme: colorScheme),
+                    pulsing: pressurePulse
                 )
-                .scaleEffect(pressurePulse ? 1.04 : 0.98)
-                .opacity(pressurePulse ? 1 : 0.9)
-                .animation(.easeInOut(duration: 0.9), value: pressurePulse)
             }
 
             ProgressView(value: localProgress(for: deadline))
@@ -2107,6 +3311,41 @@ struct PressureModeView: View {
         return formatter.string(from: interval) ?? "1m"
     }
 
+    private func localizedFullDurationString(from interval: TimeInterval, maximumUnitCount: Int) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = maximumUnitCount
+        formatter.zeroFormattingBehavior = [.dropLeading, .dropTrailing]
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.locale = Locale.autoupdatingCurrent
+        formatter.calendar = calendar
+        return formatter.string(from: interval) ?? "1 minute"
+    }
+
+    private func localizedDaysString(from interval: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day]
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        formatter.zeroFormattingBehavior = [.dropLeading, .dropTrailing]
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.locale = Locale.autoupdatingCurrent
+        formatter.calendar = calendar
+        return formatter.string(from: interval) ?? "1 day"
+    }
+
+    private func localizedShortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.dateFormat = "d MMM"
+        return formatter.string(from: date)
+    }
+
+    private func shouldShowDateSummary(remaining: TimeInterval) -> Bool {
+        remaining >= 30 * 86_400
+    }
+
     private func localProgress(for deadline: Deadline) -> Double {
         guard let due = dueDateEndOfDay(deadline) else { return 0 }
         let start = Calendar.current.date(byAdding: .day, value: -7, to: due) ?? due.addingTimeInterval(-7 * 86_400)
@@ -2117,47 +3356,139 @@ struct PressureModeView: View {
 
     private func ctaInsight(for deadline: Deadline, level: UrgencyLevel) -> String {
         let variant = PressureABAnalytics.shared.variant
+        let remainingHours = (dueDateEndOfDay(deadline)?.timeIntervalSince(now) ?? 0) / 3600
+        let isHighPriority = deadline.priority == "Высокий"
+        let heavyWorkload = upcoming72Workload >= 4
+        let progress = localProgress(for: deadline)
+
+        if level == .critical {
+            return rotatedInsight(
+                for: deadline,
+                bucket: "critical",
+                options: [
+                    L("Критическое давление. Сфокусируйтесь на главном и закройте минимум задачи."),
+                    L("Критическая зона: закройте самый важный шаг в ближайшие 20 минут"),
+                    L("Сделайте финальный рывок: 25 минут без отвлечений")
+                ]
+            )
+        }
+
+        if progress >= 0.6 {
+            return rotatedInsight(
+                for: deadline,
+                bucket: "high_progress",
+                options: [
+                    L("Осталось немного. Выделите 20–30 минут сегодня, чтобы закрыть задачу."),
+                    L("Сделайте финальный рывок: 25 минут без отвлечений"),
+                    L("Разбейте задачу на 3 шага и начните с первого")
+                ]
+            )
+        }
+
+        if progress <= 0.15, remainingHours <= 48, remainingHours > 0 {
+            return rotatedInsight(
+                for: deadline,
+                bucket: "low_progress",
+                options: [
+                    L("Начните сегодня. Даже 30 минут снизят давление."),
+                    L("Запланируйте первый блок работы сегодня"),
+                    L("Ранний старт даст запас: заложите 30 минут сегодня")
+                ]
+            )
+        }
         switch level {
         case .critical:
-            if variant == .a {
+            if remainingHours <= 3 {
                 return L("Сделайте финальный рывок: 25 минут без отвлечений")
             }
-            return L("Критическая зона: закройте самый важный шаг в ближайшие 20 минут")
+            if isHighPriority {
+                return L("Критическая зона: закройте самый важный шаг в ближайшие 20 минут")
+            }
+            return variant == .a
+                ? L("Сделайте финальный рывок: 25 минут без отвлечений")
+                : L("Критическая зона: закройте самый важный шаг в ближайшие 20 минут")
         case .red:
-            if variant == .a {
-                return L("Разбейте задачу на 3 шага и начните с первого")
-            }
-            return L("Высокое давление: начните с черновика, потом шлифуйте")
-        case .yellow:
-            if variant == .a {
-                return L("Запланируйте первый блок работы сегодня")
-            }
-            return L("Окно 72ч: выделите 45 минут сегодня, чтобы снять риск")
-        case .green:
-            if deadline.priority == "Высокий" {
+            if isHighPriority {
                 return variant == .a
                     ? L("Высокий приоритет: выделите 30 минут заранее")
                     : L("Ранний старт даст запас: заложите 30 минут сегодня")
             }
-            return variant == .a
-                ? L("Нагрузка под контролем: закрепите прогресс короткой сессией")
-                : L("Сейчас спокойный этап: сделайте мини-шаг, пока есть запас")
+            if remainingHours <= 6 {
+                return L("Разбейте задачу на 3 шага и начните с первого")
+            }
+            return L("Высокое давление: начните с черновика, потом шлифуйте")
+        case .yellow:
+            if heavyWorkload {
+                return L("Окно 72ч: выделите 45 минут сегодня, чтобы снять риск")
+            }
+            return L("Запланируйте первый блок работы сегодня")
+        case .green:
+            if isHighPriority {
+                return variant == .a
+                    ? L("Высокий приоритет: выделите 30 минут заранее")
+                    : L("Ранний старт даст запас: заложите 30 минут сегодня")
+            }
+            if heavyWorkload {
+                return L("Нагрузка под контролем: закрепите прогресс короткой сессией")
+            }
+            return L("Сейчас спокойный этап: сделайте мини-шаг, пока есть запас")
+        }
+    }
+
+    private func rotatedInsight(for deadline: Deadline, bucket: String, options: [String]) -> String {
+        guard !options.isEmpty else { return "" }
+
+        let dayOfEra = Calendar.current.ordinality(of: .day, in: .era, for: now) ?? 0
+        let seedSource = "\(deadline.id)|\(bucket)|\(dayOfEra)"
+        let stableSeed = seedSource.unicodeScalars.reduce(0) { partial, scalar in
+            partial + Int(scalar.value)
+        }
+
+        let index = stableSeed % options.count
+        return options[index]
+    }
+
+    private func priorityRank(_ priority: String) -> Int {
+        switch priority {
+        case "Высокий": return 0
+        case "Средний": return 1
+        case "Низкий": return 2
+        default: return 3
         }
     }
 }
 
 // MARK: - Deadline Detail Sheet
+private struct DeadlineDetailPresentationModifier: ViewModifier {
+    let isEmbeddedInSplitView: Bool
+
+    func body(content: Content) -> some View {
+        if isEmbeddedInSplitView {
+            content
+        } else {
+            content
+                .presentationDetents([.medium, .large])
+        }
+    }
+}
+
 struct DeadlineDetailSheet: View {
     let deadline: Deadline
+    @ObservedObject var viewModel: DeadlineViewModel
+    var isEmbeddedInSplitView: Bool = false
+    var onEdit: () -> Void
+    var onComplete: (Deadline) async -> Void
+
     @Environment(\.dismiss) private var dismiss
-    
+    @State private var isPerformingAction = false
+
     private let reminderLabels: [String: String] = [
         "none": L("Без напоминания"),
         "1hour": L("За час"),
         "1day": L("За день"),
         "1week": L("За неделю")
     ]
-    
+
     private let repeatLabels: [String: String] = [
         "none": L("Без повторения"),
         "daily": L("Ежедневно"),
@@ -2165,18 +3496,28 @@ struct DeadlineDetailSheet: View {
         "monthly": L("Ежемесячно"),
         "yearly": L("Ежегодно")
     ]
-    
+
+    private var resolvedPriority: String {
+        deadline.resolvedPriority()
+    }
+
     var body: some View {
-        NavigationView {
-            List {
+        NavigationStack {
+            detailContent
+        }
+        .modifier(DeadlineDetailPresentationModifier(isEmbeddedInSplitView: isEmbeddedInSplitView))
+    }
+
+    private var detailContent: some View {
+        List {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(deadline.title)
                             .font(.title2)
                             .fontWeight(.bold)
-                        
+
                         HStack {
-                            Label(deadline.subject, systemImage: "book")
+                            Label(deadline.localizedSubjectName, systemImage: "book")
                             Spacer()
                             Text(L(deadline.status))
                                 .padding(.horizontal, 10)
@@ -2189,11 +3530,12 @@ struct DeadlineDetailSheet: View {
                     }
                     .padding(.vertical, 4)
                 }
-                
-                Section(L("Дата")) {
+
+                Section(L("Срок и приоритет")) {
                     Label(formattedDate, systemImage: "calendar")
+                    Label(priorityLabel, systemImage: "flag.fill")
                 }
-                
+
                 if !deadline.tags.isEmpty {
                     Section(L("Теги")) {
                         HStack(spacing: 8) {
@@ -2209,51 +3551,109 @@ struct DeadlineDetailSheet: View {
                         }
                     }
                 }
-                
+
                 Section(L("Настройки")) {
-                    Label(repeatLabels[deadline.repeatType] ?? "Без повторения", systemImage: "repeat")
-                    Label(reminderLabels[deadline.reminderTime] ?? "За день", systemImage: "bell")
+                    Label(repeatLabels[deadline.repeatType] ?? L("Без повторения"), systemImage: "repeat")
+                    Label(reminderLabels[deadline.reminderTime] ?? L("За день"), systemImage: "bell")
                 }
-                
-                if !deadline.notes.isEmpty {
-                    Section(L("Заметки")) {
+
+                Section(L("Заметки")) {
+                    if deadline.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(L("Заметок нет"))
+                            .foregroundStyle(.secondary)
+                    } else {
                         Text(deadline.notes)
                             .font(.body)
+                    }
+                }
+
+                if deadline.statusType == .inProgress {
+                    Section {
+                        Button {
+                            Task { await postponeDeadline() }
+                        } label: {
+                            Label(L("Перенести на завтра"), systemImage: "calendar.badge.plus")
+                        }
+                        .disabled(isPerformingAction)
+
+                        Button {
+                            Task { await completeDeadline() }
+                        } label: {
+                            Label(L("Отметить выполненным"), systemImage: "checkmark.circle.fill")
+                        }
+                        .disabled(isPerformingAction)
+
+                        Button {
+                            onEdit()
+                        } label: {
+                            Label(L("Редактировать"), systemImage: "pencil")
+                        }
                     }
                 }
             }
             .navigationTitle(L("Детали"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L("Готово")) {
-                        dismiss()
+                if !isEmbeddedInSplitView {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L("Готово")) { dismiss() }
                     }
                 }
             }
-        }
-        .presentationDetents([.medium, .large])
     }
-    
+
+    private var priorityLabel: String {
+        let name = localizedPriority(resolvedPriority)
+        if deadline.usesAutoPriority {
+            return "\(name) · \(L("от срока"))"
+        }
+        return name
+    }
+
+    private func localizedPriority(_ priority: String) -> String {
+        switch priority {
+        case "Авто": return L("Авто")
+        case "Высокий": return L("Высокий")
+        case "Средний": return L("Средний")
+        case "Низкий": return L("Низкий")
+        default: return priority
+        }
+    }
+
     private var formattedDate: String {
-        let inputFormatter = DateFormatter()
-        inputFormatter.locale = Locale(identifier: "en_US_POSIX")
-        inputFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        let legacyFormatter = DateFormatter()
-        legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
-        legacyFormatter.dateFormat = "yyyy-MM-dd"
-        guard let date = deadline.normalizedDueDateForRecurrence() ?? inputFormatter.date(from: deadline.dueDate) ?? legacyFormatter.date(from: deadline.dueDate) else { return deadline.dueDate }
+        guard let date = deadline.normalizedDueDateForRecurrence() ?? deadline.parsedDueDate() else {
+            return deadline.dueDate
+        }
         if deadline.hasTimeInDueDate {
             return date.formatted(date: .abbreviated, time: .shortened)
         }
         return date.formatted(date: .abbreviated, time: .omitted)
     }
-    
+
     private var statusColor: Color {
         switch deadline.statusType {
         case .completed: return .green
         case .cancelled: return .gray
         default: return .indigo
+        }
+    }
+
+    private func postponeDeadline() async {
+        isPerformingAction = true
+        defer { isPerformingAction = false }
+        let updated = deadline.postponed(byDays: 1)
+        await viewModel.updateDeadline(updated)
+        if !isEmbeddedInSplitView {
+            dismiss()
+        }
+    }
+
+    private func completeDeadline() async {
+        isPerformingAction = true
+        defer { isPerformingAction = false }
+        await onComplete(deadline)
+        if !isEmbeddedInSplitView {
+            dismiss()
         }
     }
 }
@@ -2268,7 +3668,7 @@ struct ArchiveView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 Section {
                     HStack(alignment: .top, spacing: 8) {
@@ -2279,37 +3679,56 @@ struct ArchiveView: View {
                             .foregroundStyle(.primary)
                     }
                 }
-
-                ForEach(archived) { deadline in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(deadline.title)
+                if archived.isEmpty {
+                    VStack(spacing: 6) {
+                        Image(systemName: "archivebox")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text(L("В архиве пока нет задач"))
                             .font(.headline)
-                        Text("\(deadline.subject) — \(formattedDate(deadline)) — \(L(deadline.status))")
+                            .multilineTextAlignment(.center)
+                        Text(L("Здесь появятся выполненные или отменённые задачи"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        if !deadline.notes.isEmpty {
-                            Text(deadline.notes)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                            .multilineTextAlignment(.center)
                     }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            mediumHaptic()
-                            Task { await viewModel.deleteDeadline(id: deadline.id) }
-                        } label: {
-                            Label(L("Удалить"), systemImage: "trash")
-                        } .tint(.red)
-                        Button {
-                            lightHaptic()
-                            var restored = deadline
-                            restored.statusType = .inProgress
-                            restored.deletedAt = nil
-                            Task { await viewModel.updateDeadline(restored) }
-                        } label: {
-                            Label(L("Восстановить"), systemImage: "arrow.uturn.left")
+                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(archived) { deadline in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(deadline.title)
+                                .font(.headline)
+                            Text("\(deadline.localizedSubjectName) — \(formattedDate(deadline)) — \(L(deadline.status))")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            if !deadline.notes.isEmpty {
+                                Text(deadline.notes)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        .tint(.green)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                mediumHaptic()
+                                Task { await viewModel.deleteDeadline(id: deadline.id) }
+                            } label: {
+                                Label(L("Удалить"), systemImage: "trash")
+                            } .tint(.red)
+                            Button {
+                                lightHaptic()
+                                var restored = deadline
+                                restored.statusType = .inProgress
+                                restored.deletedAt = nil
+                                Task { await viewModel.updateDeadline(restored) }
+                            } label: {
+                                Label(L("Восстановить"), systemImage: "arrow.uturn.left")
+                            }
+                            .tint(.green)
+                        }
                     }
                 }
             }
@@ -2338,6 +3757,68 @@ struct ArchiveView: View {
     private func mediumHaptic(intensity: CGFloat = 0.8) {
         let haptic = UIImpactFeedbackGenerator(style: .medium)
         haptic.impactOccurred(intensity: intensity)
+    }
+}
+
+// MARK: - Undo Toast
+
+struct UndoableDeadlineAction {
+    enum Kind: Equatable {
+        case completed
+        case deleted
+    }
+
+    let kind: Kind
+    let snapshot: Deadline
+}
+
+struct DeadlineUndoToast: View {
+    let action: UndoableDeadlineAction
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: action.kind == .completed ? "checkmark.circle.fill" : "trash.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(action.kind == .completed ? .green : .orange)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+
+            Spacer(minLength: 8)
+
+            Button(action: onUndo) {
+                Text(L("Отменить"))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.indigo)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThickMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(message). \(L("Отменить"))")
+        .accessibilityIdentifier("deadlineUndoToast")
+    }
+
+    private var message: String {
+        switch action.kind {
+        case .completed:
+            return L("Задача выполнена")
+        case .deleted:
+            return L("Задача удалена")
+        }
     }
 }
 

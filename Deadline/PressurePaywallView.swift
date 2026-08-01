@@ -8,8 +8,12 @@ private func P(_ key: String) -> String {
 
 @MainActor
 final class SubscriptionManager: ObservableObject {
-    static let pressureMonthlyProductID = "com.redloop.pressuremode.monthly"
-    static let pressureYearlyProductID = "com.redloop.pressuremode.yearly"
+    static let pressureMonthlyProductID = "com.company.redloop.premium_monthly"
+    static let pressureYearlyProductID = "com.company.redloop.premium_yearly"
+    private static let pressureProductIDs: Set<String> = [
+        pressureMonthlyProductID,
+        pressureYearlyProductID
+    ]
 #if DEBUG
     private static let debugPressureUnlockKey = "debug_pressure_pro_unlocked"
 #endif
@@ -18,17 +22,24 @@ final class SubscriptionManager: ObservableObject {
     @Published private(set) var monthlyProduct: Product?
     @Published private(set) var yearlyProduct: Product?
     @Published private(set) var nextRenewalDate: Date?
+    @Published private(set) var activeProductID: String?
     @Published private(set) var isLoading = false
     @Published var purchaseErrorMessage: String?
 
     private var updatesTask: Task<Void, Never>?
 
+    private struct EntitlementSnapshot {
+        var isActive: Bool
+        var renewalDate: Date?
+        var productID: String?
+    }
+
     init() {
         updatesTask = observeTransactionUpdates()
 
         Task {
-            await refreshEntitlements()
             await loadProducts()
+            await refreshEntitlements()
         }
     }
 
@@ -37,10 +48,16 @@ final class SubscriptionManager: ObservableObject {
     }
 
     func loadProducts() async {
+        isLoading = true
+        defer { isLoading = false }
+        purchaseErrorMessage = nil
         do {
             let products = try await Product.products(for: [Self.pressureMonthlyProductID, Self.pressureYearlyProductID])
             monthlyProduct = products.first(where: { $0.id == Self.pressureMonthlyProductID })
             yearlyProduct = products.first(where: { $0.id == Self.pressureYearlyProductID })
+            if monthlyProduct == nil && yearlyProduct == nil {
+                purchaseErrorMessage = P("Подписка пока недоступна. Проверьте App Store Connect и ID продуктов.")
+            }
         } catch {
             purchaseErrorMessage = P("Не удалось загрузить подписку")
         }
@@ -54,6 +71,7 @@ final class SubscriptionManager: ObservableObject {
 
         isLoading = true
         defer { isLoading = false }
+        purchaseErrorMessage = nil
 
         do {
             let result = try await product.purchase()
@@ -77,6 +95,7 @@ final class SubscriptionManager: ObservableObject {
     func restorePurchases() async {
         isLoading = true
         defer { isLoading = false }
+        purchaseErrorMessage = nil
 
         do {
             try await AppStore.sync()
@@ -87,39 +106,30 @@ final class SubscriptionManager: ObservableObject {
     }
 
     func refreshEntitlements() async {
-        var unlocked = false
-        var nearestRenewalDate: Date?
+        var snapshot = await entitlementSnapshotFromTransactions()
 
-        for await result in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(result) else { continue }
-            if [Self.pressureMonthlyProductID, Self.pressureYearlyProductID].contains(transaction.productID),
-               transaction.revocationDate == nil,
-               transaction.expirationDate.map({ $0 > Date() }) ?? true {
-                unlocked = true
-                if let expirationDate = transaction.expirationDate {
-                    if let existing = nearestRenewalDate {
-                        nearestRenewalDate = min(existing, expirationDate)
-                    } else {
-                        nearestRenewalDate = expirationDate
-                    }
-                }
+        if let productSnapshot = await entitlementSnapshotFromSubscriptionStatus() {
+            if productSnapshot.isActive {
+                snapshot = mergeSnapshots(snapshot, productSnapshot)
+            } else {
+                // StoreKit product status is authoritative when it reports no active plan.
+                snapshot = productSnapshot
             }
         }
 
 #if DEBUG
         if UserDefaults.standard.bool(forKey: Self.debugPressureUnlockKey) {
-            unlocked = true
+            snapshot.isActive = true
         }
 #endif
 
-        isPressureProUnlocked = unlocked
-    nextRenewalDate = unlocked ? nearestRenewalDate : nil
+        applyEntitlementSnapshot(snapshot)
     }
 
 #if DEBUG
     func setDebugUnlock(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: Self.debugPressureUnlockKey)
-        isPressureProUnlocked = enabled
+        Task { await refreshEntitlements() }
     }
 #endif
 
@@ -143,6 +153,105 @@ final class SubscriptionManager: ObservableObject {
                 await transaction.finish()
                 await refreshEntitlements()
             }
+        }
+    }
+
+    private func applyEntitlementSnapshot(_ snapshot: EntitlementSnapshot) {
+        isPressureProUnlocked = snapshot.isActive
+        nextRenewalDate = snapshot.isActive ? snapshot.renewalDate : nil
+        activeProductID = snapshot.isActive ? snapshot.productID : nil
+    }
+
+    private func entitlementSnapshotFromTransactions() async -> EntitlementSnapshot {
+        var snapshot = EntitlementSnapshot(isActive: false, renewalDate: nil, productID: nil)
+        var activeExpiration: Date?
+        let now = Date()
+
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+            guard Self.pressureProductIDs.contains(transaction.productID) else { continue }
+            guard transaction.revocationDate == nil else { continue }
+            guard transaction.productType == .autoRenewable else { continue }
+            guard let expirationDate = transaction.expirationDate, expirationDate > now else { continue }
+
+            snapshot.isActive = true
+
+            if let existingRenewal = snapshot.renewalDate {
+                snapshot.renewalDate = min(existingRenewal, expirationDate)
+            } else {
+                snapshot.renewalDate = expirationDate
+            }
+
+            let currentBest = activeExpiration ?? .distantPast
+            if expirationDate > currentBest {
+                activeExpiration = expirationDate
+                snapshot.productID = transaction.productID
+            }
+        }
+
+        return snapshot
+    }
+
+    private func entitlementSnapshotFromSubscriptionStatus() async -> EntitlementSnapshot? {
+        let products = [monthlyProduct, yearlyProduct].compactMap { $0 }
+        guard !products.isEmpty else { return nil }
+
+        var snapshot = EntitlementSnapshot(isActive: false, renewalDate: nil, productID: nil)
+        var activeExpiration: Date?
+        var checkedAnyStatus = false
+        let now = Date()
+
+        for product in products {
+            guard let statuses = try? await product.subscription?.status else { continue }
+            checkedAnyStatus = true
+
+            for status in statuses {
+                guard case .verified = status.renewalInfo else { continue }
+
+                switch status.state {
+                case .subscribed, .inGracePeriod, .inBillingRetryPeriod:
+                    let expiration: Date?
+                    if case .verified(let transaction) = status.transaction {
+                        expiration = transaction.expirationDate
+                    } else {
+                        expiration = nil
+                    }
+                    guard let expiration, expiration > now else { continue }
+
+                    snapshot.isActive = true
+
+                    if let existingRenewal = snapshot.renewalDate {
+                        snapshot.renewalDate = min(existingRenewal, expiration)
+                    } else {
+                        snapshot.renewalDate = expiration
+                    }
+
+                    let currentBest = activeExpiration ?? .distantPast
+                    if expiration > currentBest {
+                        activeExpiration = expiration
+                        snapshot.productID = product.id
+                    }
+                default:
+                    continue
+                }
+            }
+        }
+
+        return checkedAnyStatus ? snapshot : nil
+    }
+
+    private func mergeSnapshots(_ lhs: EntitlementSnapshot, _ rhs: EntitlementSnapshot) -> EntitlementSnapshot {
+        guard lhs.isActive || rhs.isActive else {
+            return EntitlementSnapshot(isActive: false, renewalDate: nil, productID: nil)
+        }
+
+        switch (lhs.renewalDate, rhs.renewalDate) {
+        case let (left?, right?) where right > left:
+            return EntitlementSnapshot(isActive: true, renewalDate: right, productID: rhs.productID ?? lhs.productID)
+        case (nil, let right?):
+            return EntitlementSnapshot(isActive: true, renewalDate: right, productID: rhs.productID ?? lhs.productID)
+        default:
+            return EntitlementSnapshot(isActive: true, renewalDate: lhs.renewalDate, productID: lhs.productID ?? rhs.productID)
         }
     }
 
@@ -171,12 +280,15 @@ struct PressurePaywallView: View {
     @State private var selectedPlan: PressurePlan = .yearly
     @State private var firePulse = false
 
+    private let privacyPolicyURL = URL(string: "https://itbestyle.github.io/privacy-policy/")!
+    private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(P("Режим давления Pro"))
+                        Text(P("Режим давления"))
                             .font(.title2.weight(.bold))
                             .lineLimit(nil)
                             .fixedSize(horizontal: false, vertical: true)
@@ -199,7 +311,7 @@ struct PressurePaywallView: View {
                         featureRow(icon: "flame.fill", text: P("Видите перегруз до того, как он уничтожит ваш график"))
                         featureRow(icon: "exclamationmark.triangle.fill", text: P("Работайте под контролируемым давлением"))
                         featureRow(icon: "chart.bar.doc.horizontal.fill", text: P("Еженедельные отчёты давления"))
-                        featureRow(icon: "bolt.fill", text: P("Не позволяйте дедлайнам застать вас врасплох"))
+                        featureRow(icon: "bolt.fill", text: P("Не позволяйте задачам застать вас врасплох"))
                     }
                     .padding()
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -220,7 +332,7 @@ struct PressurePaywallView: View {
                             } label: {
                                 planCard(
                                     title: P("Месяц"),
-                                    priceText: P("$2.99 / month"),
+                                    priceText: monthlyPriceText,
                                     subtitle: P("7 days free"),
                                     accentColor: .indigo,
                                     isSelected: selectedPlan == .monthly,
@@ -234,7 +346,7 @@ struct PressurePaywallView: View {
                             } label: {
                                 planCard(
                                     title: P("Год"),
-                                    priceText: P("$19.99 / year"),
+                                    priceText: yearlyPriceText,
                                     subtitle: P("7 days free · Экономия 44% — меньше $1.70 в месяц"),
                                     accentColor: .purple,
                                     isSelected: selectedPlan == .yearly,
@@ -311,6 +423,19 @@ struct PressurePaywallView: View {
                     .font(.subheadline.weight(.semibold))
                     .disabled(subscriptionManager.isLoading)
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Link(destination: privacyPolicyURL) {
+                            Label(P("Политика конфиденциальности"), systemImage: "lock.shield")
+                                .font(.caption.weight(.semibold))
+                        }
+
+                        Link(destination: termsOfUseURL) {
+                            Label(P("Условия использования (EULA)"), systemImage: "doc.text")
+                                .font(.caption.weight(.semibold))
+                        }
+                    }
+                    .foregroundStyle(.indigo)
+
                     if let error = subscriptionManager.purchaseErrorMessage {
                         Text(error)
                             .font(.caption)
@@ -348,6 +473,7 @@ struct PressurePaywallView: View {
                 }
             }
             .padding()
+            .iPadReadableContent(maxWidth: 680)
             .navigationTitle(P("Подписка"))
             .toolbar {
                 ToolbarItem {
@@ -357,6 +483,10 @@ struct PressurePaywallView: View {
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
+            .task {
+                await subscriptionManager.loadProducts()
+                await subscriptionManager.refreshEntitlements()
+            }
         }
         .onChange(of: subscriptionManager.isPressureProUnlocked) { _, unlocked in
             if unlocked {
@@ -398,10 +528,10 @@ struct PressurePaywallView: View {
                     .foregroundStyle(.red)
             }
 
-            Text(P("До ближайшего дедлайна: 18ч"))
+            Text(P("До ближайшей задачи: 18ч"))
                 .font(.subheadline.weight(.semibold))
 
-            Text(P("Через 18 часов — критическая зона.\nБез Pro перегруз останется скрытым."))
+            Text(P("Через 18 часов — критическая зона.\nБез режима давления перегруз останется скрытым."))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.red)
                 .lineLimit(nil)
@@ -435,11 +565,31 @@ struct PressurePaywallView: View {
         .shadow(color: Color.red.opacity(0.2), radius: 16, x: 0, y: 8)
     }
 
+    private var monthlyPriceText: String {
+        if let product = subscriptionManager.monthlyProduct {
+            return "\(product.displayPrice) / \(P("month"))"
+        }
+        return P("$2.99 / month")
+    }
+
+    private var yearlyPriceText: String {
+        if let product = subscriptionManager.yearlyProduct {
+            return "\(product.displayPrice) / \(P("year"))"
+        }
+        return P("$19.99 / year")
+    }
+
     private var ctaText: String {
         switch selectedPlan {
         case .monthly:
+            if let product = subscriptionManager.monthlyProduct {
+                return String(format: P("Включить режим давления · 7 days free, then %@/month"), product.displayPrice)
+            }
             return P("Включить режим давления · 7 days free, then $2.99/month")
         case .yearly:
+            if let product = subscriptionManager.yearlyProduct {
+                return String(format: P("Включить режим давления · 7 days free, then %@/year"), product.displayPrice)
+            }
             return P("Включить режим давления · 7 days free, then $19.99/year")
         }
     }
@@ -502,11 +652,24 @@ struct PressurePaywallView: View {
 
 struct SubscriptionStatusView: View {
     @ObservedObject var subscriptionManager: SubscriptionManager
+    var onSubscribe: (() -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
 
     private var nextBillingText: String? {
         guard let date = subscriptionManager.nextRenewalDate else { return nil }
         let value = date.formatted(.dateTime.day().month(.abbreviated).year())
         return String(format: P("Активна до: %@"), value)
+    }
+
+    private var activeProduct: Product? {
+        guard let activeID = subscriptionManager.activeProductID else { return nil }
+        if subscriptionManager.monthlyProduct?.id == activeID {
+            return subscriptionManager.monthlyProduct
+        }
+        if subscriptionManager.yearlyProduct?.id == activeID {
+            return subscriptionManager.yearlyProduct
+        }
+        return nil
     }
 
     var body: some View {
@@ -541,7 +704,7 @@ struct SubscriptionStatusView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(P("Pressure Pro"))
+                        Text(P("Режим давления"))
                             .font(.headline)
                         Text(subscriptionManager.isPressureProUnlocked ? P("Подписка активна") : P("Подписка неактивна"))
                             .font(.subheadline)
@@ -565,23 +728,23 @@ struct SubscriptionStatusView: View {
                 )
                 .shadow(color: Color.indigo.opacity(0.1), radius: 10, x: 0, y: 5)
 
-                if let product = subscriptionManager.yearlyProduct ?? subscriptionManager.monthlyProduct {
+                if subscriptionManager.isPressureProUnlocked, let product = activeProduct {
                     Text(String(format: P("Текущий тариф: %@"), product.displayPrice))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
-                if let nextBillingText {
+                if subscriptionManager.isPressureProUnlocked, let nextBillingText {
                     Text(nextBillingText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(P("Что входит в Pro"))
+                    Text(P("Что входит в режим давления"))
                         .font(.headline)
 
-                    benefitRow(icon: "bell.badge.fill", text: P("Умные push-напоминания перед дедлайном"))
+                    benefitRow(icon: "bell.badge.fill", text: P("Умные push-напоминания перед задачей"))
                     benefitRow(icon: "bolt.fill", text: P("Режим давления и приоритизация задач"))
                     benefitRow(icon: "chart.bar.doc.horizontal.fill", text: P("Еженедельные советы по нагрузке"))
                 }
@@ -591,6 +754,22 @@ struct SubscriptionStatusView: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(Color.indigo.opacity(0.16), lineWidth: 1)
                 )
+
+                if !subscriptionManager.isPressureProUnlocked {
+                    Button {
+                        onSubscribe?()
+                    } label: {
+                        HStack {
+                            Image(systemName: "bolt.fill")
+                            Text(P("Включить режим давления"))
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                }
 
                 Button {
                     Task { await subscriptionManager.restorePurchases() }
@@ -651,10 +830,20 @@ struct SubscriptionStatusView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding()
+            .iPadReadableContent(maxWidth: 680)
             .navigationTitle(P("Подписка"))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label(P("Назад"), systemImage: "chevron.left")
+                    }
+                }
+            }
             .task {
-                await subscriptionManager.refreshEntitlements()
                 await subscriptionManager.loadProducts()
+                await subscriptionManager.refreshEntitlements()
             }
         }
     }

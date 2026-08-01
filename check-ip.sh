@@ -1,0 +1,17 @@
+#!/bin/bash
+echo "=== Проверка сетевого подключения ==="
+echo ""
+echo "Текущая WiFi сеть:"
+networksetup -getairportnetwork en0
+echo ""
+echo "IP-адрес Mac:"
+ipconfig getifaddr en0 || echo "❌ Не подключен к WiFi"
+echo ""
+echo "Сервер на порту 8080:"
+lsof -i :8080 | grep LISTEN || echo "❌ Сервер не запущен"
+echo ""
+echo "=== Инструкции ==="
+echo "1. Подключите Mac к WiFi сети"
+echo "2. Подключите iPhone к той же WiFi сети"
+echo "3. Обновите IP в DeadlineViewModel.swift строка 16"
+echo ""

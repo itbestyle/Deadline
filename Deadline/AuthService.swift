@@ -27,7 +27,7 @@ class AuthService: ObservableObject {
     @Published var needsEmailVerification = false
     @Published var verificationEmail: String?
     
-    private let baseURL = "https://deadlines-api-bpptyv4q3a-ew.a.run.app"
+    private let baseURL = "https://deadlines-api-744471608721.europe-west1.run.app"
     private let tokenKey = "auth_token"
     private let emailKey = "user_email"
     private let appGroup = "group.tic-tac-toe.Deadline"
@@ -445,6 +445,20 @@ class AuthService: ObservableObject {
     }
 
     @MainActor
+    func refreshBackendTokenIfNeeded() async {
+        #if canImport(FirebaseAuth)
+        guard isAuthenticated, let user = Auth.auth().currentUser else { return }
+        do {
+            let idToken = try await user.getIDToken(forcingRefresh: false)
+            let apiResponse = try await exchangeFirebaseToken(idToken)
+            applyAuthSuccess(token: apiResponse.token, email: apiResponse.email)
+        } catch {
+            // Keep the stored backend token; sync will surface errors if it is stale.
+        }
+        #endif
+    }
+
+    @MainActor
     func logout() {
         #if canImport(FirebaseAuth)
         try? Auth.auth().signOut()
@@ -460,6 +474,150 @@ class AuthService: ObservableObject {
         needsEmailVerification = false
         verificationEmail = nil
         lastAuthErrorKind = nil
+    }
+
+    enum AccountDeletionError: LocalizedError {
+        case notAuthenticated
+        case needsRecentLogin
+        case serverError(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .notAuthenticated:
+                return NSLocalizedString("Вы не авторизованы", comment: "Account deletion")
+            case .needsRecentLogin:
+                return NSLocalizedString("Для удаления аккаунта войдите снова и повторите попытку", comment: "Account deletion")
+            case .serverError(let message):
+                return message
+            }
+        }
+    }
+
+    /// Permanently deletes the account on the server, in Firebase Auth, and clears local session data.
+    @MainActor
+    func deleteAccount(password: String? = nil) async throws {
+        guard isAuthenticated else {
+            throw AccountDeletionError.notAuthenticated
+        }
+
+        isLoading = true
+        errorMessage = nil
+        lastAuthErrorKind = nil
+        defer { isLoading = false }
+
+        try await deleteBackendAccount()
+        try await deleteFirebaseAccount(password: password)
+        logout()
+    }
+
+    @MainActor
+    private func deleteBackendAccount() async throws {
+        guard let token, !token.isEmpty else {
+            throw AccountDeletionError.notAuthenticated
+        }
+
+        if let url = URL(string: baseURL + "/auth/account") {
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            #if canImport(FirebaseAuth)
+            if let user = Auth.auth().currentUser {
+                let idToken = try await user.getIDToken(forcingRefresh: true)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: ["idToken": idToken])
+            }
+            #endif
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) || http.statusCode == 204 {
+                return
+            }
+            if let http = response as? HTTPURLResponse, http.statusCode == 404 {
+                try await deleteBackendAccountViaFirebaseEndpoint()
+                return
+            }
+            let message = parseServerErrorMessage(from: data) ?? localizedStatusError((response as? HTTPURLResponse)?.statusCode ?? 0)
+            throw AccountDeletionError.serverError(message)
+        }
+
+        try await deleteBackendAccountViaFirebaseEndpoint()
+    }
+
+    @MainActor
+    private func deleteBackendAccountViaFirebaseEndpoint() async throws {
+        #if canImport(FirebaseAuth)
+        guard let user = Auth.auth().currentUser else {
+            return
+        }
+
+        let idToken = try await user.getIDToken(forcingRefresh: true)
+        let candidates = ["/auth/firebase/delete-account", "/auth/firebase/account"]
+        var lastError: String?
+
+        for path in candidates {
+            guard let url = URL(string: baseURL + path) else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["idToken": idToken])
+            if let token {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { continue }
+            if (200..<300).contains(http.statusCode) || http.statusCode == 204 {
+                return
+            }
+            if http.statusCode == 404 {
+                continue
+            }
+            lastError = parseServerErrorMessage(from: data) ?? localizedStatusError(http.statusCode)
+        }
+
+        if let lastError {
+            throw AccountDeletionError.serverError(lastError)
+        }
+        #endif
+    }
+
+    @MainActor
+    private func deleteFirebaseAccount(password: String?) async throws {
+        #if canImport(FirebaseAuth)
+        guard let user = Auth.auth().currentUser else { return }
+
+        do {
+            try await user.delete()
+        } catch {
+            let nsError = error as NSError
+            if nsError.domain == AuthErrorDomain,
+               AuthErrorCode(rawValue: nsError.code) == .requiresRecentLogin {
+                if let email = currentEmail ?? user.email,
+                   let password,
+                   !password.isEmpty {
+                    let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+                    try await user.reauthenticate(with: credential)
+                    try await user.delete()
+                    return
+                }
+                throw AccountDeletionError.needsRecentLogin
+            }
+            throw AccountDeletionError.serverError(firebaseReadableError(error))
+        }
+        #endif
+    }
+
+    private func parseServerErrorMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let error = json["error"] as? String, !error.isEmpty { return error }
+            if let message = json["message"] as? String, !message.isEmpty { return message }
+        }
+        if let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            return String(text.prefix(180))
+        }
+        return nil
     }
 
     // MARK: - Firebase backend exchange

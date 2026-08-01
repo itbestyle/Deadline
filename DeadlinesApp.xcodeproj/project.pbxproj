@@ -1,0 +1,899 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A51034792FBBB4840084C14C /* Pressure.storekit in Resources */ = {isa = PBXBuildFile; fileRef = A51034782FBBB4840084C14C /* Pressure.storekit */; };
+		A52182752F352E2800E7C548 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A52182742F352E2800E7C548 /* WidgetKit.framework */; };
+		A52182772F352E2800E7C548 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A52182762F352E2800E7C548 /* SwiftUI.framework */; };
+		A52182862F352E2900E7C548 /* DeadlineWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A52182722F352E2800E7C548 /* DeadlineWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A527DFCE2F3FD53E00D9901A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A527DFCD2F3FD53E00D9901A /* FirebaseAuth */; };
+		A527DFD02F3FD53E00D9901A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A527DFCF2F3FD53E00D9901A /* FirebaseCore */; };
+		A527DFD22F3FD94000D9901A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A527DFD12F3FD94000D9901A /* GoogleService-Info.plist */; };
+		A5470EBE2FBB8A0F003764C7 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5470EBD2FBB8A0F003764C7 /* StoreKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A52182842F352E2900E7C548 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A54DB94F2E8B2F6000EB8BBF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A52182712F352E2800E7C548;
+			remoteInfo = DeadlineWidgetExtension;
+		};
+		A54DB9652E8B2F6200EB8BBF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A54DB94F2E8B2F6000EB8BBF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A54DB9562E8B2F6000EB8BBF;
+			remoteInfo = Deadline;
+		};
+		A54DB96F2E8B2F6200EB8BBF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A54DB94F2E8B2F6000EB8BBF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A54DB9562E8B2F6000EB8BBF;
+			remoteInfo = Deadline;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A521828B2F352E2900E7C548 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A52182862F352E2900E7C548 /* DeadlineWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5D4170D2F4D0ED50021296A /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A51034782FBBB4840084C14C /* Pressure.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Pressure.storekit; sourceTree = "<group>"; };
+		A52182722F352E2800E7C548 /* DeadlineWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeadlineWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A52182742F352E2800E7C548 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A52182762F352E2800E7C548 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		A521828C2F352F3500E7C548 /* DeadlinesApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeadlinesApp.entitlements; sourceTree = "<group>"; };
+		A521828D2F352F7900E7C548 /* DeadlineWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeadlineWidgetExtension.entitlements; sourceTree = "<group>"; };
+		A527DFD12F3FD94000D9901A /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A5470EBD2FBB8A0F003764C7 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		A54DB9572E8B2F6000EB8BBF /* DeadlinesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeadlinesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A54DB9642E8B2F6200EB8BBF /* DeadlinesAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeadlinesAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeadlinesAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A58A61A12E8C903400ADF615 /* DeadlinesApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "DeadlinesApp-Info.plist"; sourceTree = "<group>"; };
+		A5D416E92F4D0ED30021296A /* RedloopWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "RedloopWatch Watch App.app"; path = "/Users/sergey/Deadline/build/Debug-watchos/RedloopWatch Watch App.app"; sourceTree = "<absolute>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A52182872F352E2900E7C548 /* Exceptions for "DeadlineWidget" folder in "DeadlineWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A52182712F352E2800E7C548 /* DeadlineWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A52182782F352E2800E7C548 /* DeadlineWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A52182872F352E2900E7C548 /* Exceptions for "DeadlineWidget" folder in "DeadlineWidgetExtension" target */,
+			);
+			path = DeadlineWidget;
+			sourceTree = "<group>";
+		};
+		A54C8BE62E96D40B00914384 /* SwiftData */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SwiftData;
+			sourceTree = "<group>";
+		};
+		A54C8BEA2E96D66800914384 /* Data */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Data;
+			sourceTree = "<group>";
+		};
+		A54DB9592E8B2F6000EB8BBF /* Deadline */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Deadline;
+			sourceTree = "<group>";
+		};
+		A54DB9672E8B2F6200EB8BBF /* DeadlineTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeadlineTests;
+			sourceTree = "<group>";
+		};
+		A54DB9712E8B2F6200EB8BBF /* DeadlineUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeadlineUITests;
+			sourceTree = "<group>";
+		};
+		A5D416EA2F4D0ED30021296A /* RedloopWatch Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RedloopWatch Watch App";
+			sourceTree = "<group>";
+		};
+		A5D416F82F4D0ED50021296A /* RedloopWatch Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RedloopWatch Watch AppTests";
+			sourceTree = "<group>";
+		};
+		A5D417022F4D0ED50021296A /* RedloopWatch Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RedloopWatch Watch AppUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A521826F2F352E2800E7C548 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A52182772F352E2800E7C548 /* SwiftUI.framework in Frameworks */,
+				A52182752F352E2800E7C548 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9542E8B2F6000EB8BBF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A5470EBE2FBB8A0F003764C7 /* StoreKit.framework in Frameworks */,
+				A527DFD02F3FD53E00D9901A /* FirebaseCore in Frameworks */,
+				A527DFCE2F3FD53E00D9901A /* FirebaseAuth in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9612E8B2F6200EB8BBF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB96B2E8B2F6200EB8BBF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A51034382FBB8E6A0084C14C /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				A5D416E92F4D0ED30021296A /* RedloopWatch Watch App.app */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		A52182732F352E2800E7C548 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A5470EBD2FBB8A0F003764C7 /* StoreKit.framework */,
+				A52182742F352E2800E7C548 /* WidgetKit.framework */,
+				A52182762F352E2800E7C548 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A54DB94E2E8B2F6000EB8BBF = {
+			isa = PBXGroup;
+			children = (
+				A51034782FBBB4840084C14C /* Pressure.storekit */,
+				A521828D2F352F7900E7C548 /* DeadlineWidgetExtension.entitlements */,
+				A521828C2F352F3500E7C548 /* DeadlinesApp.entitlements */,
+				A54C8BEA2E96D66800914384 /* Data */,
+				A54C8BE62E96D40B00914384 /* SwiftData */,
+				A58A61A12E8C903400ADF615 /* DeadlinesApp-Info.plist */,
+				A54DB9592E8B2F6000EB8BBF /* Deadline */,
+				A54DB9672E8B2F6200EB8BBF /* DeadlineTests */,
+				A54DB9712E8B2F6200EB8BBF /* DeadlineUITests */,
+				A52182782F352E2800E7C548 /* DeadlineWidget */,
+				A5D416EA2F4D0ED30021296A /* RedloopWatch Watch App */,
+				A5D416F82F4D0ED50021296A /* RedloopWatch Watch AppTests */,
+				A5D417022F4D0ED50021296A /* RedloopWatch Watch AppUITests */,
+				A52182732F352E2800E7C548 /* Frameworks */,
+				A54DB9582E8B2F6000EB8BBF /* Products */,
+				A527DFD12F3FD94000D9901A /* GoogleService-Info.plist */,
+				A51034382FBB8E6A0084C14C /* Recovered References */,
+			);
+			sourceTree = "<group>";
+		};
+		A54DB9582E8B2F6000EB8BBF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A54DB9572E8B2F6000EB8BBF /* DeadlinesApp.app */,
+				A54DB9642E8B2F6200EB8BBF /* DeadlinesAppTests.xctest */,
+				A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */,
+				A52182722F352E2800E7C548 /* DeadlineWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A52182712F352E2800E7C548 /* DeadlineWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A52182882F352E2900E7C548 /* Build configuration list for PBXNativeTarget "DeadlineWidgetExtension" */;
+			buildPhases = (
+				A521826E2F352E2800E7C548 /* Sources */,
+				A521826F2F352E2800E7C548 /* Frameworks */,
+				A52182702F352E2800E7C548 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A52182782F352E2800E7C548 /* DeadlineWidget */,
+			);
+			name = DeadlineWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = DeadlineWidgetExtension;
+			productReference = A52182722F352E2800E7C548 /* DeadlineWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A54DB9562E8B2F6000EB8BBF /* DeadlinesApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A54DB9782E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesApp" */;
+			buildPhases = (
+				A54DB9532E8B2F6000EB8BBF /* Sources */,
+				A54DB9542E8B2F6000EB8BBF /* Frameworks */,
+				A54DB9552E8B2F6000EB8BBF /* Resources */,
+				A521828B2F352E2900E7C548 /* Embed Foundation Extensions */,
+				A5D4170D2F4D0ED50021296A /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A52182852F352E2900E7C548 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A54C8BE62E96D40B00914384 /* SwiftData */,
+				A54C8BEA2E96D66800914384 /* Data */,
+				A54DB9592E8B2F6000EB8BBF /* Deadline */,
+			);
+			name = DeadlinesApp;
+			packageProductDependencies = (
+				A527DFCD2F3FD53E00D9901A /* FirebaseAuth */,
+				A527DFCF2F3FD53E00D9901A /* FirebaseCore */,
+			);
+			productName = Deadline;
+			productReference = A54DB9572E8B2F6000EB8BBF /* DeadlinesApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A54DB9632E8B2F6200EB8BBF /* DeadlinesAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A54DB97B2E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesAppTests" */;
+			buildPhases = (
+				A54DB9602E8B2F6200EB8BBF /* Sources */,
+				A54DB9612E8B2F6200EB8BBF /* Frameworks */,
+				A54DB9622E8B2F6200EB8BBF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A54DB9662E8B2F6200EB8BBF /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A54DB9672E8B2F6200EB8BBF /* DeadlineTests */,
+			);
+			name = DeadlinesAppTests;
+			packageProductDependencies = (
+			);
+			productName = DeadlineTests;
+			productReference = A54DB9642E8B2F6200EB8BBF /* DeadlinesAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A54DB96D2E8B2F6200EB8BBF /* DeadlinesAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A54DB97E2E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesAppUITests" */;
+			buildPhases = (
+				A54DB96A2E8B2F6200EB8BBF /* Sources */,
+				A54DB96B2E8B2F6200EB8BBF /* Frameworks */,
+				A54DB96C2E8B2F6200EB8BBF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A54DB9702E8B2F6200EB8BBF /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A54DB9712E8B2F6200EB8BBF /* DeadlineUITests */,
+			);
+			name = DeadlinesAppUITests;
+			packageProductDependencies = (
+			);
+			productName = DeadlineUITests;
+			productReference = A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A54DB94F2E8B2F6000EB8BBF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					A52182712F352E2800E7C548 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					A54DB9562E8B2F6000EB8BBF = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					A54DB9632E8B2F6200EB8BBF = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A54DB9562E8B2F6000EB8BBF;
+					};
+					A54DB96D2E8B2F6200EB8BBF = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A54DB9562E8B2F6000EB8BBF;
+					};
+				};
+			};
+			buildConfigurationList = A54DB9522E8B2F6000EB8BBF /* Build configuration list for PBXProject "DeadlinesApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				ru,
+				Base,
+				it,
+				ro,
+			);
+			mainGroup = A54DB94E2E8B2F6000EB8BBF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A527DFCC2F3FD53E00D9901A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A54DB9582E8B2F6000EB8BBF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A54DB9562E8B2F6000EB8BBF /* DeadlinesApp */,
+				A54DB9632E8B2F6200EB8BBF /* DeadlinesAppTests */,
+				A54DB96D2E8B2F6200EB8BBF /* DeadlinesAppUITests */,
+				A52182712F352E2800E7C548 /* DeadlineWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A52182702F352E2800E7C548 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9552E8B2F6000EB8BBF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A527DFD22F3FD94000D9901A /* GoogleService-Info.plist in Resources */,
+				A51034792FBBB4840084C14C /* Pressure.storekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9622E8B2F6200EB8BBF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB96C2E8B2F6200EB8BBF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A521826E2F352E2800E7C548 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9532E8B2F6000EB8BBF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB9602E8B2F6200EB8BBF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A54DB96A2E8B2F6200EB8BBF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A52182852F352E2900E7C548 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A52182712F352E2800E7C548 /* DeadlineWidgetExtension */;
+			targetProxy = A52182842F352E2900E7C548 /* PBXContainerItemProxy */;
+		};
+		A54DB9662E8B2F6200EB8BBF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A54DB9562E8B2F6000EB8BBF /* DeadlinesApp */;
+			targetProxy = A54DB9652E8B2F6200EB8BBF /* PBXContainerItemProxy */;
+		};
+		A54DB9702E8B2F6200EB8BBF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A54DB9562E8B2F6000EB8BBF /* DeadlinesApp */;
+			targetProxy = A54DB96F2E8B2F6200EB8BBF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A52182892F352E2900E7C548 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = DeadlineWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeadlineWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DeadlineWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.DeadlineWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A521828A2F352E2900E7C548 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = DeadlineWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeadlineWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DeadlineWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.DeadlineWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A54DB9762E8B2F6200EB8BBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A54DB9772E8B2F6200EB8BBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A54DB9792E8B2F6200EB8BBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconLight AppIconDark";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DeadlinesApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DeadlinesApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A54DB97A2E8B2F6200EB8BBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconLight AppIconDark";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DeadlinesApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DeadlinesApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A54DB97C2E8B2F6200EB8BBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tic-tac-toe.DeadlineTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeadlinesApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeadlinesApp";
+			};
+			name = Debug;
+		};
+		A54DB97D2E8B2F6200EB8BBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tic-tac-toe.DeadlineTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeadlinesApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeadlinesApp";
+			};
+			name = Release;
+		};
+		A54DB97F2E8B2F6200EB8BBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tic-tac-toe.DeadlineUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DeadlinesApp;
+			};
+			name = Debug;
+		};
+		A54DB9802E8B2F6200EB8BBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tic-tac-toe.DeadlineUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DeadlinesApp;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A52182882F352E2900E7C548 /* Build configuration list for PBXNativeTarget "DeadlineWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A52182892F352E2900E7C548 /* Debug */,
+				A521828A2F352E2900E7C548 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A54DB9522E8B2F6000EB8BBF /* Build configuration list for PBXProject "DeadlinesApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A54DB9762E8B2F6200EB8BBF /* Debug */,
+				A54DB9772E8B2F6200EB8BBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A54DB9782E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A54DB9792E8B2F6200EB8BBF /* Debug */,
+				A54DB97A2E8B2F6200EB8BBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A54DB97B2E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A54DB97C2E8B2F6200EB8BBF /* Debug */,
+				A54DB97D2E8B2F6200EB8BBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A54DB97E2E8B2F6200EB8BBF /* Build configuration list for PBXNativeTarget "DeadlinesAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A54DB97F2E8B2F6200EB8BBF /* Debug */,
+				A54DB9802E8B2F6200EB8BBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A527DFCC2F3FD53E00D9901A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A527DFCD2F3FD53E00D9901A /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A527DFCC2F3FD53E00D9901A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		A527DFCF2F3FD53E00D9901A /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A527DFCC2F3FD53E00D9901A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A54DB94F2E8B2F6000EB8BBF /* Project object */;
+}
