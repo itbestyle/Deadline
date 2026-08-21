@@ -15,6 +15,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A5E210052F4D200000000004"
+               BuildableName = "RedloopWatch.app"
+               BlueprintName = "RedloopWatch Watch App"
+               ReferencedContainer = "container:DeadlinesApp.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "A54DB9562E8B2F6000EB8BBF"
                BuildableName = "DeadlinesApp.app"
                BlueprintName = "DeadlinesApp"

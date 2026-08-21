@@ -160,6 +160,7 @@ struct AccountSettingsView: View {
         }
 
         WidgetAppGroupStore.saveCritical(nil)
+        WidgetAppGroupStore.saveActiveList([])
         NotificationManager.shared.rescheduleAll(for: [])
         LiveActivityManager.endAll()
     }

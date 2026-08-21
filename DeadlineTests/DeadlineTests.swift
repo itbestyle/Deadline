@@ -171,6 +171,33 @@ struct DeadlineTests {
         _ = now
     }
 
+    @Test func widgetList_sortsByDueDateAndExcludesFinishedTasks() async throws {
+        let now = makeDate("2026-06-01 12:00")
+        let deadlines = [
+            makeDeadline(id: "l1", due: "2026-06-03 10:00", status: .inProgress),
+            makeDeadline(id: "l2", due: "2026-06-01 18:00", status: .inProgress),
+            makeDeadline(id: "l3", due: "2026-06-02 10:00", status: .completed),
+            makeDeadline(id: "l4", due: "2026-06-02 12:00", status: .cancelled)
+        ]
+
+        let entries = WidgetListBuilder.activeEntries(from: deadlines, now: now)
+
+        #expect(entries.map(\.id) == ["l2", "l1"])
+        #expect(entries.first?.hasExplicitTime == true)
+    }
+
+    @Test func widgetList_capsNumberOfPublishedEntries() async throws {
+        let now = makeDate("2026-06-01 12:00")
+        let deadlines = (2...9).map {
+            makeDeadline(id: "c\($0)", due: "2026-06-0\($0) 10:00", status: .inProgress)
+        }
+
+        let entries = WidgetListBuilder.activeEntries(from: deadlines, now: now)
+
+        #expect(entries.count == WidgetListBuilder.maxEntries)
+        #expect(entries.first?.id == "c2")
+    }
+
     @Test func pressureActionPlan_prioritizesOverdueAsNextStep() async throws {
         let planner = PressureActionPlanner()
         let now = makeDate("2026-06-01 12:00")

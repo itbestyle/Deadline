@@ -4,14 +4,14 @@ import UIKit
 
 struct LoginView: View {
     @ObservedObject var authService = AuthService.shared
-
+    
     @State private var email = ""
     @State private var password = ""
+    @State private var isRegistering = false
     @State private var animateLogo = false
     @State private var animateForm = false
     @State private var lastSubmitAt = Date.distantPast
     @State private var isPasswordVisible = false
-    @State private var showRegister = false
     @State private var appleSignInCoordinator = AppleSignInCoordinator()
     @FocusState private var focusedField: Field?
 
@@ -28,12 +28,13 @@ struct LoginView: View {
         !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 28) {
                 Spacer(minLength: 16)
-
+                
+                // Logo/Title
                 VStack(spacing: 10) {
                     Image("LoginIcon")
                         .resizable()
@@ -46,15 +47,17 @@ struct LoginView: View {
                 }
                 .opacity(animateLogo ? 1 : 0)
                 .scaleEffect(animateLogo ? 1 : 0.96)
-
+                
+                // Form
                 VStack(spacing: 14) {
                     emailField
+                    
                     passwordField
 
                     if shouldShowForgotPassword {
                         forgotPasswordButton
                     }
-
+                    
                     if let error = authService.errorMessage {
                         Text(error)
                             .foregroundStyle(.red)
@@ -65,34 +68,40 @@ struct LoginView: View {
                     if authService.needsEmailVerification {
                         verificationBanner
                     }
-
+                    
                     primaryActionButton
+
                     googleActionButton
+
                     appleActionButton
-                    registerLinkButton
+
+                    tertiaryActionButton
                 }
                 .opacity(animateForm ? 1 : 0)
                 .offset(y: animateForm ? 0 : 18)
                 .padding(.horizontal, 32)
-
+                
                 Spacer(minLength: 28)
             }
             .navigationBarHidden(true)
-            .navigationDestination(isPresented: $showRegister) {
-                RegisterView()
-            }
             .onAppear {
                 withAnimation(.easeOut(duration: 0.4)) {
                     animateLogo = true
                 }
+
                 withAnimation(.easeOut(duration: 0.45).delay(0.1)) {
                     animateForm = true
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { dismissKeyboard() }
+            .onTapGesture {
+                dismissKeyboard()
+            }
             .simultaneousGesture(
-                DragGesture(minimumDistance: 8).onChanged { _ in dismissKeyboard() }
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in
+                        dismissKeyboard()
+                    }
             )
             .onChange(of: password) { _, newValue in
                 if newValue.isEmpty {
@@ -104,6 +113,25 @@ struct LoginView: View {
                     isPasswordVisible = false
                 }
             }
+        }
+    }
+
+    private func submitFromButtonTap() {
+        guard !authService.isLoading else { return }
+
+        let now = Date()
+        guard now.timeIntervalSince(lastSubmitAt) > Self.submitThrottleInterval else { return }
+        lastSubmitAt = now
+
+        isPasswordVisible = false
+        Task { @MainActor in
+            for _ in 0..<Self.inputSettleAttempts {
+                if normalizedCredentials != nil {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: Self.inputSettleDelayNs)
+            }
+            performAction()
         }
     }
 
@@ -135,7 +163,7 @@ struct LoginView: View {
     private var passwordField: some View {
         HStack(spacing: 8) {
             ZStack {
-                TextField(L("Пароль"), text: $password)
+                TextField("Пароль", text: $password)
                     .opacity(isPasswordVisible ? 1 : 0)
                     .allowsHitTesting(isPasswordVisible)
                     .textContentType(.password)
@@ -144,9 +172,11 @@ struct LoginView: View {
                     .autocorrectionDisabled()
                     .submitLabel(.go)
                     .focused($focusedField, equals: .password)
-                    .onSubmit { submitFromButtonTap() }
+                    .onSubmit {
+                        submitFromButtonTap()
+                    }
 
-                SecureField(L("Пароль"), text: $password)
+                SecureField("Пароль", text: $password)
                     .opacity(isPasswordVisible ? 0 : 1)
                     .allowsHitTesting(!isPasswordVisible)
                     .textContentType(.password)
@@ -155,7 +185,9 @@ struct LoginView: View {
                     .autocorrectionDisabled()
                     .submitLabel(.go)
                     .focused($focusedField, equals: .password)
-                    .onSubmit { submitFromButtonTap() }
+                    .onSubmit {
+                        submitFromButtonTap()
+                    }
             }
 
             Button {
@@ -195,7 +227,7 @@ struct LoginView: View {
                     .tint(.white)
                     .frame(maxWidth: .infinity)
             } else {
-                Text(L("Войти"))
+                Text(isRegistering ? "Зарегистрироваться" : "Войти")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
             }
@@ -211,29 +243,31 @@ struct LoginView: View {
         .buttonStyle(PremiumPressButtonStyle())
         .contentShape(Rectangle())
         .simultaneousGesture(
-            TapGesture().onEnded { submitFromButtonTap() }
+            TapGesture().onEnded {
+                submitFromButtonTap()
+            }
         )
         .disabled(authService.isLoading)
     }
 
     private var verificationBanner: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L("Подтвердите почту"))
+            Text("Подтвердите почту")
                 .font(.subheadline.weight(.semibold))
 
-            Text(String(format: L("Мы отправили ссылку на %@. После подтверждения нажмите «Я подтвердил(а)». "), authService.verificationEmail ?? email))
+            Text(String(format: NSLocalizedString("Мы отправили ссылку на %@. После подтверждения нажмите «Я подтвердил(а)». ", comment: ""), authService.verificationEmail ?? email))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
-                Button(L("Отправить ещё раз")) {
+                Button("Отправить ещё раз") {
                     Task {
                         await authService.resendVerification(email: authService.verificationEmail ?? email, password: password)
                     }
                 }
                 .font(.caption.weight(.semibold))
 
-                Button(L("Я подтвердил(а)")) {
+                Button("Я подтвердил(а)") {
                     Task {
                         await authService.login(email: email, password: password)
                     }
@@ -251,7 +285,8 @@ struct LoginView: View {
     private var googleActionButton: some View {
         Button {
             Task {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.7)
+                let tapHaptic = UIImpactFeedbackGenerator(style: .light)
+                tapHaptic.impactOccurred(intensity: 0.7)
                 await authService.loginWithGoogle()
             }
         } label: {
@@ -284,7 +319,7 @@ struct LoginView: View {
                 Task { await authService.loginWithApple(idToken: idToken, rawNonce: nonce) }
             }
             appleSignInCoordinator.onError = { _ in
-                authService.errorMessage = L("Что-то пошло не так. Попробуйте ещё раз.")
+                authService.errorMessage = NSLocalizedString("Что-то пошло не так. Попробуйте ещё раз.", comment: "")
                 authService.lastAuthErrorKind = .other
             }
             appleSignInCoordinator.start()
@@ -309,11 +344,9 @@ struct LoginView: View {
         .disabled(authService.isLoading)
     }
 
-    private var registerLinkButton: some View {
-        Button {
-            showRegister = true
-        } label: {
-            Text(L("Нет аккаунта? Зарегистрироваться"))
+    private var tertiaryActionButton: some View {
+        Button(action: { isRegistering.toggle() }) {
+            Text(isRegistering ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -323,7 +356,7 @@ struct LoginView: View {
 
     private var forgotPasswordButton: some View {
         Button(action: sendPasswordReset) {
-            Text(L("Забыли пароль?"))
+            Text("Забыли пароль?")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -333,24 +366,7 @@ struct LoginView: View {
     }
 
     private var shouldShowForgotPassword: Bool {
-        !authService.needsEmailVerification
-    }
-
-    private func submitFromButtonTap() {
-        guard !authService.isLoading else { return }
-
-        let now = Date()
-        guard now.timeIntervalSince(lastSubmitAt) > Self.submitThrottleInterval else { return }
-        lastSubmitAt = now
-
-        isPasswordVisible = false
-        Task { @MainActor in
-            for _ in 0..<Self.inputSettleAttempts {
-                if normalizedCredentials != nil { break }
-                try? await Task.sleep(nanoseconds: Self.inputSettleDelayNs)
-            }
-            performLogin()
-        }
+        !isRegistering && !authService.needsEmailVerification
     }
 
     private var normalizedCredentials: (email: String, password: String)? {
@@ -360,15 +376,21 @@ struct LoginView: View {
         return (normalizedEmail, normalizedPassword)
     }
 
-    private func performLogin() {
+    private func performAction() {
         guard let credentials = normalizedCredentials, !authService.isLoading else { return }
 
         email = credentials.email
         password = credentials.password
 
         Task {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.7)
-            await authService.login(email: credentials.email, password: credentials.password)
+            let tapHaptic = UIImpactFeedbackGenerator(style: .light)
+            tapHaptic.impactOccurred(intensity: 0.7)
+
+            if isRegistering {
+                await authService.register(email: credentials.email, password: credentials.password)
+            } else {
+                await authService.login(email: credentials.email, password: credentials.password)
+            }
 
             let resultHaptic = UINotificationFeedbackGenerator()
             if authService.isAuthenticated {
@@ -382,7 +404,7 @@ struct LoginView: View {
     private func sendPasswordReset() {
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedEmail.isEmpty else {
-            authService.errorMessage = L("Введите email, чтобы сбросить пароль")
+            authService.errorMessage = NSLocalizedString("Введите email, чтобы сбросить пароль", comment: "")
             authService.lastAuthErrorKind = .invalidInput
             focusedField = .email
             return
@@ -400,6 +422,7 @@ struct LoginView: View {
         focusedField = nil
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
+
 }
 
 private struct PremiumPressButtonStyle: ButtonStyle {

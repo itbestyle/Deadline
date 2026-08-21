@@ -55,7 +55,12 @@ final class DeadlineViewModel: ObservableObject {
 
         pathMonitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
-                self?.isOffline = path.status != .satisfied
+                guard let self else { return }
+                let wasOffline = self.isOffline
+                self.isOffline = path.status != .satisfied
+                if wasOffline, !self.isOffline {
+                    await self.syncNow()
+                }
             }
         }
         pathMonitor.start(queue: pathMonitorQueue)
@@ -175,6 +180,9 @@ final class DeadlineViewModel: ObservableObject {
         do {
             try await repository.syncWithServer()
             lastSyncError = nil
+            // A successful round-trip proves connectivity even when the path
+            // monitor never reported a change (e.g. the server itself was down).
+            isOffline = false
         } catch {
             if isBenignSyncCancellation(error) {
                 return
@@ -215,13 +223,18 @@ final class DeadlineViewModel: ObservableObject {
             autoDeleteOldArchived()
             let models = try repository.fetchLocal(filter: currentFilter)
             deadlines = models.map(mapToDeadline)
-            let payloads = deadlines
+
+            // Widget, watch and Live Activity must reflect every deadline,
+            // not whatever filter the list screen happens to have applied.
+            let unfiltered = (try? repository.fetchLocal(filter: DeadlineFilter()).map(mapToDeadline)) ?? deadlines
+
+            let payloads = unfiltered
                 .filter { $0.deletedAt == nil }
                 .map {
                     WatchDeadlinePayload(
                         id: $0.id,
                         title: $0.title,
-                            subject: $0.localizedSubjectName,
+                        subject: $0.localizedSubjectName,
                         dueDate: $0.dueDate,
                         status: $0.status,
                         priority: $0.priority,
@@ -231,11 +244,12 @@ final class DeadlineViewModel: ObservableObject {
             if let data = try? JSONEncoder().encode(payloads) {
                 WatchConnectivityBridge.shared.sync(encodedDeadlinesData: data)
             }
-            WidgetAppGroupStore.saveCritical(WidgetCriticalSnapshotBuilder.nearestCritical(from: deadlines))
-            LiveActivityManager.sync(with: deadlines)
+            WidgetAppGroupStore.saveCritical(WidgetCriticalSnapshotBuilder.nearestCritical(from: unfiltered))
+            WidgetAppGroupStore.saveActiveList(WidgetListBuilder.activeEntries(from: unfiltered))
+            LiveActivityManager.sync(with: unfiltered)
             WidgetCenter.shared.reloadAllTimelines()
             Task {
-                await DeadlineIntentStore.shared.update(from: deadlines)
+                await DeadlineIntentStore.shared.update(from: unfiltered)
             }
         } catch {
             lastSyncError = userFacingSyncError(error)

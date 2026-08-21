@@ -17,11 +17,23 @@ struct WidgetCriticalSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// A single active deadline published to the App Group so widgets can render
+/// without hitting the network. Recurrence and auto-priority are already resolved.
+struct WidgetListEntry: Codable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let subject: String
+    let dueInstant: Date
+    let priority: String
+    let hasExplicitTime: Bool
+}
+
 enum WidgetSharedKeys: Sendable {
     static let suiteName = "group.tic-tac-toe.Deadline"
     static let criticalSnapshotKey = "widget.critical.snapshot"
     static let pendingCompleteKey = "widget.pending.complete.id"
     static let locallyCompletedIDsKey = "widget.locally.completed.ids"
+    static let activeListKey = "widget.active.list"
     static let hapticDarwinNotification = "group.tic-tac-toe.Deadline.widget.haptic"
 }
 
@@ -70,6 +82,26 @@ enum WidgetAppGroupStore: Sendable {
         }
     }
 
+    static func saveActiveList(_ entries: [WidgetListEntry]) {
+        guard let defaults = UserDefaults(suiteName: WidgetSharedKeys.suiteName) else { return }
+        if entries.isEmpty {
+            defaults.removeObject(forKey: WidgetSharedKeys.activeListKey)
+        } else if let data = try? JSONEncoder().encode(entries) {
+            defaults.set(data, forKey: WidgetSharedKeys.activeListKey)
+        }
+    }
+
+    static func loadActiveList() -> [WidgetListEntry] {
+        guard let defaults = UserDefaults(suiteName: WidgetSharedKeys.suiteName),
+              let data = defaults.data(forKey: WidgetSharedKeys.activeListKey) else { return [] }
+        return (try? JSONDecoder().decode([WidgetListEntry].self, from: data)) ?? []
+    }
+
+    static func loadVisibleActiveList() -> [WidgetListEntry] {
+        let hidden = locallyCompletedIDs()
+        return loadActiveList().filter { !hidden.contains($0.id) }
+    }
+
     static func applyOptimisticComplete(deadlineID: String) {
         markLocallyCompleted(id: deadlineID)
         if let snapshot = loadCritical(), snapshot.id == deadlineID {
@@ -115,5 +147,30 @@ enum WidgetCriticalSnapshotBuilder {
         case "Низкий": return 2
         default: return 3
         }
+    }
+}
+
+@MainActor
+enum WidgetListBuilder {
+    static let maxEntries = 5
+
+    static func activeEntries(from deadlines: [Deadline], now: Date = Date()) -> [WidgetListEntry] {
+        deadlines
+            .filter { $0.deletedAt == nil && $0.statusType == .inProgress }
+            .compactMap { deadline -> (entry: WidgetListEntry, due: Date)? in
+                guard let due = deadline.effectiveDueInstant(referenceDate: now) else { return nil }
+                let entry = WidgetListEntry(
+                    id: deadline.id,
+                    title: deadline.title,
+                    subject: deadline.localizedSubjectName,
+                    dueInstant: due,
+                    priority: deadline.resolvedPriority(referenceDate: now),
+                    hasExplicitTime: deadline.hasTimeInDueDate
+                )
+                return (entry, due)
+            }
+            .sorted { $0.due < $1.due }
+            .prefix(maxEntries)
+            .map(\.entry)
     }
 }

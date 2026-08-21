@@ -361,58 +361,17 @@ struct PressurePaywallView: View {
                         Button {
                             Task { await subscriptionManager.purchasePressureMode(plan: selectedPlan) }
                         } label: {
-                            HStack {
-                                if subscriptionManager.isLoading {
-                                    ProgressView()
-                                        .tint(.white)
-                                }
-                                Image(systemName: "bolt.fill")
-                                    .font(.subheadline.weight(.bold))
-                                Text(ctaText)
-                                    .font(.headline.weight(.semibold))
-                                    .lineLimit(nil)
-                                    .multilineTextAlignment(.center)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(.white)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.indigo, Color.red.opacity(0.85)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ),
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            PressureGradientCTA(
+                                title: ctaText,
+                                showsSpinner: subscriptionManager.isLoading
                             )
-                            .shadow(color: Color.red.opacity(0.3), radius: 12, x: 0, y: 6)
                         }
                         .disabled(subscriptionManager.isLoading)
                     } else {
                         Button {
                             Task { await subscriptionManager.loadProducts() }
                         } label: {
-                            HStack {
-                                Image(systemName: "bolt.fill")
-                                    .font(.subheadline.weight(.bold))
-                                Text(P("Включить режим давления"))
-                                    .font(.headline.weight(.semibold))
-                                    .lineLimit(nil)
-                                    .multilineTextAlignment(.center)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(.white)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.indigo, Color.red.opacity(0.85)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ),
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            )
-                            .shadow(color: Color.red.opacity(0.3), radius: 12, x: 0, y: 6)
+                            PressureGradientCTA(title: P("Включить режим давления"))
                         }
                         .disabled(subscriptionManager.isLoading)
                     }
@@ -647,6 +606,73 @@ struct PressurePaywallView: View {
                 .stroke(isSelected ? accentColor.opacity(0.9) : accentColor.opacity(isBestChoice ? 0.45 : 0.22), lineWidth: isSelected ? 2 : 1)
         )
         .shadow(color: isSelected ? accentColor.opacity(0.26) : .clear, radius: 10, x: 0, y: 6)
+    }
+}
+
+private struct PressureGradientCTA: View {
+    let title: String
+    var showsSpinner: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+    var body: some View {
+        HStack {
+            if showsSpinner {
+                ProgressView()
+                    .tint(.white)
+            }
+            Image(systemName: "bolt.fill")
+                .font(.subheadline.weight(.bold))
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .lineLimit(nil)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .foregroundStyle(.white)
+        .background {
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [Color.indigo, Color.red.opacity(0.85)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .overlay {
+                    if !reduceMotion {
+                        KeyframeAnimator(initialValue: 0.0, repeating: true) { progress in
+                            GeometryReader { geometry in
+                                let width = geometry.size.width
+                                let band = max(width * 0.32, 72)
+                                LinearGradient(
+                                    colors: [
+                                        .clear,
+                                        .white.opacity(0.12),
+                                        .white.opacity(0.28),
+                                        .white.opacity(0.12),
+                                        .clear
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                                .frame(width: band)
+                                .offset(x: -band + (width + band) * progress)
+                                .blendMode(.plusLighter)
+                            }
+                        } keyframes: { _ in
+                            LinearKeyframe(1, duration: 3.2)
+                            LinearKeyframe(1, duration: 2.2)
+                        }
+                    }
+                }
+                .clipShape(shape)
+        }
+        .shadow(color: Color.red.opacity(0.3), radius: 12, x: 0, y: 6)
     }
 }
 

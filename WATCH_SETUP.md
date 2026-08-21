@@ -1,57 +1,18 @@
-# Watch MVP setup (Deadline)
+# Watch app
 
-В проект уже добавлены файлы watch MVP:
+The companion watchOS app lives in `RedloopWatch Watch App/` and is embedded in `DeadlinesApp`.
 
-- `DeadlineWatch/DeadlineWatchApp.swift`
-- `DeadlineWatch/WatchContentView.swift`
-- `DeadlineWatch/WatchDeadlineStore.swift`
-- `DeadlineWatch/WatchDeadlineModel.swift`
+iPhone sends the unfiltered deadline list through `WatchConnectivityBridge` (`WCSession.updateApplicationContext`). Completing a task on the watch comes back as `sendMessage` / `transferUserInfo` (`action` + `id`).
 
-И данные с iPhone уже отправляются через `WatchConnectivityBridge` из `DeadlineViewModel`.
+## Run
 
-## 1) Добавить watch targets
+1. Pair an Apple Watch simulator with an iPhone simulator (Xcode → Window → Devices and Simulators), or use a real paired watch.
+2. Run the `DeadlinesApp` scheme on the iPhone — the watch app is built and embedded in `PlugIns/`.
+3. On a real watch: enable Developer Mode, then look for Redloop on the watch. If it is missing, open the Watch app on iPhone → My Watch → Available Apps → Install Redloop.
+4. Or run the `RedloopWatch Watch App` scheme on the paired watch.
 
-1. Открой `DeadlinesApp.xcodeproj` в Xcode.
-2. `File` → `New` → `Target...`.
-3. Выбери `watchOS` → `Watch App for iOS App`.
-4. Назови, например, `DeadlineWatch`.
-5. Включи SwiftUI lifecycle (по умолчанию).
+## Check
 
-## 2) Подключить файлы в target membership
-
-Для watch extension включи membership у:
-
-- `DeadlineWatchApp.swift`
-- `WatchContentView.swift`
-- `WatchDeadlineStore.swift`
-- `WatchDeadlineModel.swift`
-
-Для iOS app membership должны остаться:
-
-- `Deadline/WatchConnectivityBridge.swift`
-- `Deadline/WatchDeadlinePayload.swift`
-- `Deadline/DeadlineViewModel.swift`
-
-## 3) Capability
-
-Для iOS app и для watch extension добавь capability:
-
-- `App Groups` (тот же group, что и в приложении)
-
-> Для текущего обмена по `WCSession.updateApplicationContext` App Group не обязателен, но лучше держать capabilities согласованными.
-
-## 4) Проверка
-
-1. Запусти iOS app на iPhone simulator/device.
-2. Запусти watch app на paired watch simulator/device.
-3. Проверь, что на watch появляются:
-   - секция `Pressure High` (<=24ч),
-   - секция `Pressure Mid` (<=72ч),
-   - пустое состояние без активных дедлайнов.
-
-## 5) Что уже реализовано
-
-- Передача массива дедлайнов с полем `pressure` (`critical/medium/low`) с iPhone.
-- Сортировка по ближайшей дате на watch.
-- Визуальные pressure-индикаторы в watch list.
-- Pressure-индикаторы в widget accessory-видах (`inline/circular/rectangular`) и строках `systemSmall/systemMedium`.
+- High (≤24h) and Mid (≤72h) sections appear on the watch.
+- Swipe a row to mark it done — the iPhone list updates.
+- Empty state when there are no active tasks, or when the iPhone app has not synced yet.

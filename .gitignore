@@ -47,3 +47,11 @@ GoogleService-Info.plist
 .env.*
 *.pem
 *.key
+*.p8
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+
+# Nested privacy-policy git checkout — not part of the iOS app
+privacy-repo/

@@ -62,16 +62,15 @@ struct DeadlineEntry: TimelineEntry {
 
 // MARK: - Provider
 struct Provider: TimelineProvider {
-    private let baseURL = "https://deadlines-api-744471608721.europe-west1.run.app"
-    private let appGroup = "group.tic-tac-toe.Deadline"
+    private let appGroup = WidgetSharedKeys.suiteName
 
-    private let dueDateParser: DateFormatter = {
+    private let dueDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
         return formatter
     }()
-    
+
     private var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: appGroup)
     }
@@ -83,62 +82,46 @@ struct Provider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (DeadlineEntry) -> ()) {
-        let entry = DeadlineEntry(date: Date(), deadlines: [], isLoggedIn: false)
-        completion(entry)
+        completion(makeEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<DeadlineEntry>) -> ()) {
-        Task {
-            let deadlines = await fetchDeadlines()
-            let isLoggedIn = sharedDefaults?.string(forKey: "auth_token") != nil
-            
-            let entry = DeadlineEntry(
-                date: Date(),
-                deadlines: deadlines,
-                isLoggedIn: isLoggedIn
-            )
-            
-            // Refresh every 15 minutes
-            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-            completion(timeline)
-        }
-    }
-    
-    private func fetchDeadlines() async -> [WidgetDeadline] {
-        guard let token = sharedDefaults?.string(forKey: "auth_token"),
-              let url = URL(string: "\(baseURL)/deadlines") else {
-            return []
-        }
-        
-        var request = URLRequest(url: url)
-        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return []
-            }
-            
-            let decoder = JSONDecoder()
-            var deadlines = try decoder.decode([WidgetDeadline].self, from: data)
-            
-            // Filter only active deadlines and sort by effective due date.
-            let hiddenIDs = WidgetAppGroupStore.locallyCompletedIDs()
-            deadlines = deadlines
-                .filter { $0.status == "в процессе" && !hiddenIDs.contains($0.id) }
-                .sorted { 
-                    let d1 = parsedDate(effectiveDateString(for: $0)) ?? .distantFuture
-                    let d2 = parsedDate(effectiveDateString(for: $1)) ?? .distantFuture
-                    return d1 < d2
-                }
-            
-            return Array(deadlines.prefix(3))
-        } catch {
-            return []
-        }
+        let entry = makeEntry()
+
+        // The app republishes the App Group payload on every change, so the
+        // widget only needs a slow safety refresh plus one at the next due date.
+        let now = Date()
+        let safetyRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: now) ?? now.addingTimeInterval(900)
+        let nextDue = entry.deadlines
+            .compactMap { $0.effectiveDueDate.flatMap(parsedDate) }
+            .filter { $0 > now }
+            .min()
+        let refresh = min(safetyRefresh, nextDue.map { $0.addingTimeInterval(1) } ?? safetyRefresh)
+
+        completion(Timeline(entries: [entry], policy: .after(refresh)))
     }
 
+    private func makeEntry() -> DeadlineEntry {
+        let isLoggedIn = sharedDefaults?.string(forKey: "auth_token") != nil
+        let deadlines = WidgetAppGroupStore.loadVisibleActiveList().map(makeWidgetDeadline)
+        return DeadlineEntry(date: Date(), deadlines: Array(deadlines.prefix(3)), isLoggedIn: isLoggedIn)
+    }
+
+    private func makeWidgetDeadline(_ entry: WidgetListEntry) -> WidgetDeadline {
+        dueDateFormatter.dateFormat = entry.hasExplicitTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"
+        let formatted = dueDateFormatter.string(from: entry.dueInstant)
+        return WidgetDeadline(
+            id: entry.id,
+            title: entry.title,
+            subject: entry.subject,
+            dueDate: formatted,
+            effectiveDueDate: formatted,
+            repeatType: "none",
+            priority: entry.priority,
+            status: "в процессе"
+        )
+    }
+    
     private func parsedDate(_ dateString: String) -> Date? {
         let formats = [
             "yyyy-MM-dd HH:mm:ss",
@@ -147,58 +130,13 @@ struct Provider: TimelineProvider {
         ]
 
         for format in formats {
-            dueDateParser.dateFormat = format
-            if let date = dueDateParser.date(from: dateString) {
+            dueDateFormatter.dateFormat = format
+            if let date = dueDateFormatter.date(from: dateString) {
                 return date
             }
         }
 
         return ISO8601DateFormatter().date(from: dateString)
-    }
-
-    private func effectiveDateString(for deadline: WidgetDeadline) -> String {
-        if let effective = deadline.effectiveDueDate, !effective.isEmpty {
-            return effective
-        }
-
-        guard let repeatType = deadline.repeatType,
-              repeatType != "none",
-              let initialDate = parsedDate(deadline.dueDate) else {
-            return deadline.dueDate
-        }
-
-        var next = initialDate
-        let now = Date()
-        let calendar = Calendar.current
-        let hasTime = hasExplicitTime(in: deadline.dueDate)
-
-        for _ in 0..<600 {
-            if hasTime {
-                if next >= now { break }
-            } else {
-                if calendar.startOfDay(for: next) >= calendar.startOfDay(for: now) { break }
-            }
-
-            switch repeatType {
-            case "daily":
-                next = next.addingTimeInterval(24 * 60 * 60)
-            case "weekly":
-                next = next.addingTimeInterval(7 * 24 * 60 * 60)
-            case "monthly":
-                next = calendar.date(byAdding: .month, value: 1, to: next) ?? next
-            case "yearly":
-                next = calendar.date(byAdding: .year, value: 1, to: next) ?? next
-            default:
-                return deadline.dueDate
-            }
-        }
-
-        dueDateParser.dateFormat = hasTime ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd"
-        return dueDateParser.string(from: next)
-    }
-
-    private func hasExplicitTime(in dateString: String) -> Bool {
-        dateString.contains(":") || dateString.contains("T")
     }
 }
 

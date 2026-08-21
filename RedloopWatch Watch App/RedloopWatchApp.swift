@@ -1,17 +1,13 @@
-//
-//  RedloopWatchApp.swift
-//  RedloopWatch Watch App
-//
-//  Created by Сергей Родоманюк on 24.02.2026.
-//
-
 import SwiftUI
 
 @main
-struct RedloopWatch_Watch_AppApp: App {
+struct RedloopWatchApp: App {
+    @State private var store = WatchDeadlineStore()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            WatchContentView()
+                .environment(store)
         }
     }
 }

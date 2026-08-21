@@ -15,6 +15,7 @@
 		A527DFD02F3FD53E00D9901A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A527DFCF2F3FD53E00D9901A /* FirebaseCore */; };
 		A527DFD22F3FD94000D9901A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A527DFD12F3FD94000D9901A /* GoogleService-Info.plist */; };
 		A5470EBE2FBB8A0F003764C7 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5470EBD2FBB8A0F003764C7 /* StoreKit.framework */; };
+		A5E210022F4D200000000001 /* RedloopWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A5D416E92F4D0ED30021296A /* RedloopWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +40,13 @@
 			remoteGlobalIDString = A54DB9562E8B2F6000EB8BBF;
 			remoteInfo = Deadline;
 		};
+		A5E210032F4D200000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A54DB94F2E8B2F6000EB8BBF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A5E210052F4D200000000004;
+			remoteInfo = "RedloopWatch Watch App";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -59,6 +67,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
+				A5E210022F4D200000000001 /* RedloopWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -78,7 +87,7 @@
 		A54DB9642E8B2F6200EB8BBF /* DeadlinesAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeadlinesAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeadlinesAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A58A61A12E8C903400ADF615 /* DeadlinesApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "DeadlinesApp-Info.plist"; sourceTree = "<group>"; };
-		A5D416E92F4D0ED30021296A /* RedloopWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "RedloopWatch Watch App.app"; path = "/Users/sergey/Deadline/build/Debug-watchos/RedloopWatch Watch App.app"; sourceTree = "<absolute>"; };
+		A5D416E92F4D0ED30021296A /* RedloopWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RedloopWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +97,13 @@
 				Info.plist,
 			);
 			target = A52182712F352E2800E7C548 /* DeadlineWidgetExtension */;
+		};
+		A5E2100C2F4D20000000000B /* Exceptions for "RedloopWatch Watch App" folder in "RedloopWatch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A5E210052F4D200000000004 /* RedloopWatch Watch App */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -127,6 +143,9 @@
 		};
 		A5D416EA2F4D0ED30021296A /* RedloopWatch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A5E2100C2F4D20000000000B /* Exceptions for "RedloopWatch Watch App" folder in "RedloopWatch Watch App" target */,
+			);
 			path = "RedloopWatch Watch App";
 			sourceTree = "<group>";
 		};
@@ -176,17 +195,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A5E210072F4D200000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A51034382FBB8E6A0084C14C /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				A5D416E92F4D0ED30021296A /* RedloopWatch Watch App.app */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		A52182732F352E2800E7C548 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -216,7 +234,6 @@
 				A52182732F352E2800E7C548 /* Frameworks */,
 				A54DB9582E8B2F6000EB8BBF /* Products */,
 				A527DFD12F3FD94000D9901A /* GoogleService-Info.plist */,
-				A51034382FBB8E6A0084C14C /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -227,6 +244,7 @@
 				A54DB9642E8B2F6200EB8BBF /* DeadlinesAppTests.xctest */,
 				A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */,
 				A52182722F352E2800E7C548 /* DeadlineWidgetExtension.appex */,
+				A5D416E92F4D0ED30021296A /* RedloopWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -270,6 +288,7 @@
 			);
 			dependencies = (
 				A52182852F352E2900E7C548 /* PBXTargetDependency */,
+				A5E210042F4D200000000003 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A54C8BE62E96D40B00914384 /* SwiftData */,
@@ -331,6 +350,28 @@
 			productReference = A54DB96E2E8B2F6200EB8BBF /* DeadlinesAppUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A5E210052F4D200000000004 /* RedloopWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A5E2100B2F4D20000000000A /* Build configuration list for PBXNativeTarget "RedloopWatch Watch App" */;
+			buildPhases = (
+				A5E210062F4D200000000005 /* Sources */,
+				A5E210072F4D200000000006 /* Frameworks */,
+				A5E210082F4D200000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A5D416EA2F4D0ED30021296A /* RedloopWatch Watch App */,
+			);
+			name = "RedloopWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "RedloopWatch Watch App";
+			productReference = A5D416E92F4D0ED30021296A /* RedloopWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -354,6 +395,9 @@
 					A54DB96D2E8B2F6200EB8BBF = {
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = A54DB9562E8B2F6000EB8BBF;
+					};
+					A5E210052F4D200000000004 = {
+						CreatedOnToolsVersion = 26.2;
 					};
 				};
 			};
@@ -381,6 +425,7 @@
 				A54DB9632E8B2F6200EB8BBF /* DeadlinesAppTests */,
 				A54DB96D2E8B2F6200EB8BBF /* DeadlinesAppUITests */,
 				A52182712F352E2800E7C548 /* DeadlineWidgetExtension */,
+				A5E210052F4D200000000004 /* RedloopWatch Watch App */,
 			);
 		};
 /* End PBXProject section */
@@ -410,6 +455,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A54DB96C2E8B2F6200EB8BBF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5E210082F4D200000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -447,6 +499,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A5E210062F4D200000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -465,6 +524,11 @@
 			target = A54DB9562E8B2F6000EB8BBF /* DeadlinesApp */;
 			targetProxy = A54DB96F2E8B2F6200EB8BBF /* PBXContainerItemProxy */;
 		};
+		A5E210042F4D200000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A5E210052F4D200000000004 /* RedloopWatch Watch App */;
+			targetProxy = A5E210032F4D200000000002 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -475,11 +539,11 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = DeadlineWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 75F92DWMGM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DeadlineWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DeadlineWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -487,7 +551,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.DeadlineWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -507,11 +571,11 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = DeadlineWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 75F92DWMGM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DeadlineWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = DeadlineWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -519,7 +583,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.DeadlineWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -659,10 +723,12 @@
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconLight AppIconDark";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_OTHER_FLAGS = "--enable-icon-stack-fallback-generation=disabled";
 				CODE_SIGN_ENTITLEMENTS = DeadlinesApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 75F92DWMGM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -679,7 +745,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -703,10 +769,12 @@
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconLight AppIconDark";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_OTHER_FLAGS = "--enable-icon-stack-fallback-generation=disabled";
 				CODE_SIGN_ENTITLEMENTS = DeadlinesApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 75F92DWMGM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -723,7 +791,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -821,6 +889,94 @@
 			};
 			name = Release;
 		};
+		A5E210092F4D200000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_OTHER_FLAGS = "--enable-icon-stack-fallback-generation=disabled";
+				CODE_SIGN_CONTEXT_CLASS = XCWatchOSCodeSignContext;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RedloopWatch Watch App/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.sergey.timepressure;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.3;
+				OTHER_CODE_SIGN_FLAGS = "--generate-entitlement-der";
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.watchkitapp;
+				PRODUCT_NAME = RedloopWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		A5E2100A2F4D200000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_OTHER_FLAGS = "--enable-icon-stack-fallback-generation=disabled";
+				CODE_SIGN_CONTEXT_CLASS = XCWatchOSCodeSignContext;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 75F92DWMGM;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RedloopWatch Watch App/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Redloop;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.sergey.timepressure;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.3;
+				OTHER_CODE_SIGN_FLAGS = "--generate-entitlement-der";
+				PRODUCT_BUNDLE_IDENTIFIER = com.sergey.timepressure.watchkitapp;
+				PRODUCT_NAME = RedloopWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -865,6 +1021,15 @@
 			buildConfigurations = (
 				A54DB97F2E8B2F6200EB8BBF /* Debug */,
 				A54DB9802E8B2F6200EB8BBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A5E2100B2F4D20000000000A /* Build configuration list for PBXNativeTarget "RedloopWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A5E210092F4D200000000008 /* Debug */,
+				A5E2100A2F4D200000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
