@@ -39,3 +39,11 @@ xcuserdata/
 # Editor/local files
 .todo
 .todoList.txt
+
+# Secrets / local Firebase config (keep on disk, never commit)
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+.env
+.env.*
+*.pem
+*.key
