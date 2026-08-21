@@ -16,3 +16,7 @@ iOS app for deadlines and time pressure. SwiftUI, SwiftData, WidgetKit, Live Act
 4. Build and run the `DeadlinesApp` scheme on a device or simulator.
 
 The Watch app is embedded in the iPhone app (`Watch/`). Install it from the Watch app on iPhone after running `DeadlinesApp` on a paired device.
+
+## Backend
+
+Go API: https://github.com/itbestyle/deadlines-api
